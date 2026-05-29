@@ -1,0 +1,79 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+:root {
+  --accent-1: #f4a261;
+  --accent-2: #e76f51;
+  --bg-top: #2a3f5f;
+  --bg-mid: #1a2332;
+  --bg-bottom: #0f1620;
+  --emerald: #34d399;
+  --rose: #fb7185;
+  --amber: #fbbf24;
+  --sky: #38bdf8;
+}
+
+html, body {
+  width: 100%;
+  min-height: 100%;
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  background: var(--bg-bottom);
+}
+
+body {
+  background: radial-gradient(ellipse at top, var(--bg-top) 0%, var(--bg-mid) 40%, var(--bg-bottom) 100%);
+  background-attachment: fixed;
+  min-height: 100vh;
+  color: white;
+}
+
+input, button, select, textarea {
+  font-family: inherit;
+}
+
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.display-font {
+  font-family: 'Fraunces', serif;
+  font-style: italic;
+}
+
+.glow-card {
+  background: linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+
+.pill-btn {
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+.pill-btn:active {
+  transform: scale(0.96);
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.anim-in {
+  animation: slideUp 0.35s ease-out backwards;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.spinner {
+  animation: spin 0.8s linear infinite;
+}
+
+::-webkit-scrollbar { width: 0; background: transparent; }
