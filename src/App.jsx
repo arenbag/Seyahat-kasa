@@ -786,6 +786,13 @@ function LocationPicker({ initial, onClose, onConfirm }) {
     });
   };
 
+  const openGoogle = () => {
+    const url = sel ? `https://www.google.com/maps?q=${sel.lat},${sel.lng}`
+      : q.trim() ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q.trim())}`
+      : 'https://www.google.com/maps';
+    window.open(url, '_blank', 'noopener');
+  };
+
   const noLeaflet = typeof window !== 'undefined' && !window.L;
 
   return (
@@ -818,6 +825,9 @@ function LocationPicker({ initial, onClose, onConfirm }) {
               <div ref={ref} style={{ height: '46vh', minHeight: 260, width: '100%', borderRadius: 14, overflow: 'hidden', border: '1px solid var(--line)' }} />
               <p style={{ color: 'var(--ink-faint)', fontSize: 12, textAlign: 'center' }}>Haritada bir yere dokunarak işaretle.</p>
               {sel && <div style={{ fontSize: 13, color: 'var(--ink-soft)', textAlign: 'center' }}>📍 {sel.ad || `${sel.lat.toFixed(5)}, ${sel.lng.toFixed(5)}`}</div>}
+              <button onClick={openGoogle} type="button" className="tap" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 12, border: '1.5px solid var(--line)', background: '#fff', color: 'var(--ink-soft)', padding: 11, fontWeight: 500, fontSize: 13.5 }}>
+                <MapPin size={15} /> Google Maps'te aç
+              </button>
               <button onClick={() => sel && onConfirm(sel)} disabled={!sel} className="btn-primary tap" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                 Bu Konumu Kullan
               </button>
