@@ -609,6 +609,7 @@ function ExpensesTab({ group, members, expenses, katilanlar = [], reload, onEdit
   const baseSym = CURRENCY_SYMBOLS[group.ana_para_birimi] || group.ana_para_birimi;
   const [viewImg, setViewImg] = useState(null);
   const [viewLoc, setViewLoc] = useState(null);
+  const [openId, setOpenId] = useState(null);
   const adderName = (id) => katilanlar.find(k => k.kullanici_id === id)?.kullanicilar?.kullanici_adi;
   const deleteExpense = async (id) => {
     if (!confirm('Bu harcamayı silmek istediğinden emin misin?')) return;
@@ -657,30 +658,38 @@ function ExpensesTab({ group, members, expenses, katilanlar = [], reload, onEdit
                   <div style={{ color: 'var(--ink-faint)', fontSize: 11.5 }}>≈ {baseSym}{formatNum(baseAmt)}</div>
                 )}
               </div>
-              {e.enlem != null && e.boylam != null && (
-                <button onClick={() => setViewLoc(e)} className="tap" title="Konumu göster"
-                  style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, marginLeft: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--olive)', background: 'rgba(111,122,79,0.12)', border: 'none' }}>
-                  <MapPin size={15} />
-                </button>
-              )}
-              {e.foto_url && (
-                <button onClick={() => setViewImg(e.foto_url)} className="tap" title="Fişi göster"
-                  style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, marginLeft: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--teal)', background: 'rgba(63,107,107,0.1)', border: 'none' }}>
-                  <ImageIcon size={15} />
-                </button>
-              )}
-              <button onClick={() => onEdit(e)} className="tap" title="Düzenle"
-                style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, marginLeft: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--terracotta)', background: 'rgba(193,96,47,0.1)', border: 'none' }}>
-                <Pencil size={15} />
+              <button onClick={() => setOpenId(openId === e.id ? null : e.id)} className="tap" title="İşlemler"
+                style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, marginLeft: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ink-soft)', background: openId === e.id ? 'var(--paper-2)' : 'transparent', border: 'none' }}>
+                <MoreHorizontal size={18} />
               </button>
-              {isOwner && (
-                <button onClick={() => deleteExpense(e.id)} className="tap" title="Sil"
-                  style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, marginLeft: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--berry)', background: 'rgba(158,75,84,0.1)', border: 'none' }}>
-                  <Trash2 size={15} />
-                </button>
-              )}
             </div>
             {e.not_metni && <div style={{ color: 'var(--ink-faint)', fontSize: 12.5, marginTop: 8, paddingLeft: 55, fontStyle: 'italic' }}>"{e.not_metni}"</div>}
+            {openId === e.id && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 8, marginTop: 11, paddingTop: 11, borderTop: '1px solid var(--line)' }}>
+                {e.enlem != null && e.boylam != null && (
+                  <button onClick={() => { setViewLoc(e); setOpenId(null); }} className="tap"
+                    style={{ display: 'flex', alignItems: 'center', gap: 5, borderRadius: 9, padding: '7px 12px', fontSize: 13, fontWeight: 600, color: 'var(--olive)', background: 'rgba(111,122,79,0.12)', border: 'none' }}>
+                    <MapPin size={14} /> Konum
+                  </button>
+                )}
+                {e.foto_url && (
+                  <button onClick={() => { setViewImg(e.foto_url); setOpenId(null); }} className="tap"
+                    style={{ display: 'flex', alignItems: 'center', gap: 5, borderRadius: 9, padding: '7px 12px', fontSize: 13, fontWeight: 600, color: 'var(--teal)', background: 'rgba(63,107,107,0.12)', border: 'none' }}>
+                    <ImageIcon size={14} /> Fiş
+                  </button>
+                )}
+                <button onClick={() => { onEdit(e); setOpenId(null); }} className="tap"
+                  style={{ display: 'flex', alignItems: 'center', gap: 5, borderRadius: 9, padding: '7px 12px', fontSize: 13, fontWeight: 600, color: 'var(--terracotta)', background: 'rgba(193,96,47,0.12)', border: 'none' }}>
+                  <Pencil size={14} /> Düzenle
+                </button>
+                {isOwner && (
+                  <button onClick={() => { setOpenId(null); deleteExpense(e.id); }} className="tap"
+                    style={{ display: 'flex', alignItems: 'center', gap: 5, borderRadius: 9, padding: '7px 12px', fontSize: 13, fontWeight: 600, color: 'var(--berry)', background: 'rgba(158,75,84,0.12)', border: 'none' }}>
+                    <Trash2 size={14} /> Sil
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         );
       })}
