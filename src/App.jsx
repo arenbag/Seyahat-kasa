@@ -248,20 +248,20 @@ function Avatar({ name, id, size = 38 }) {
 function HomeView({ session, myGroups, loadingGroups, onOpenGroup, onNewGroup, onJoinGroup, onLogout }) {
   return (
     <div className="rise">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 40, marginTop: 12 }}>
-        <div style={{ width: 46, height: 46, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 28, marginTop: 8, padding: 12 }}>
+        <div style={{ width: 42, height: 42, borderRadius: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
           background: 'linear-gradient(135deg, var(--terracotta), var(--terracotta-dark))', boxShadow: '0 4px 12px rgba(193,96,47,0.3)' }}>
-          <Plane color="#fff" size={22} strokeWidth={2} />
+          <Plane color="#fff" size={21} strokeWidth={2} />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div className="serif" style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.01em' }}>Seyahat Kasa</div>
-          <div style={{ color: 'var(--ink-faint)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 5 }}>
-            <AtSign size={12} /> {session?.kullanici_adi}
+          <div className="serif" style={{ fontSize: 19, fontWeight: 600, letterSpacing: '-0.01em' }}>Seyahat Kasa</div>
+          <div style={{ color: 'var(--ink-faint)', fontSize: 12.5, display: 'flex', alignItems: 'center', gap: 4 }}>
+            <AtSign size={11} /> {session?.kullanici_adi}
           </div>
         </div>
         <button onClick={onLogout} className="tap" title="Çıkış yap"
-          style={{ width: 40, height: 40, borderRadius: 11, background: 'var(--card)', border: '1px solid var(--line)', color: 'var(--ink-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <LogOut size={18} />
+          style={{ width: 38, height: 38, borderRadius: 11, background: 'var(--paper-2)', border: 'none', color: 'var(--ink-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <LogOut size={17} />
         </button>
       </div>
 
@@ -484,20 +484,20 @@ function GroupView({ groupId, session, onBack, onLeave, onDeleted }) {
   return (
     <>
     <div className="rise">
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
-        <BackBtn onBack={onBack} label="Gruplar" noMargin />
-        <button onClick={share} className="tap" style={{ borderRadius: 999, padding: '7px 14px', display: 'flex', alignItems: 'center', gap: 7, background: 'var(--card)', border: '1px solid var(--line)', color: 'var(--ink-soft)', fontSize: 13, fontWeight: 600 }}>
-          {copied ? <Check size={15} color="var(--olive)" /> : <Share2 size={15} />}
-          <span style={{ fontFamily: 'monospace', letterSpacing: '0.08em' }}>{copied ? 'Kopyalandı' : group.kod}</span>
+      <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 18, padding: 11 }}>
+        <button onClick={onBack} className="tap" title="Gruplar"
+          style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, background: 'var(--paper-2)', border: 'none', color: 'var(--ink-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <ChevronLeft size={19} />
         </button>
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20 }}>
-        <Avatar name={group.ad} id={group.id} size={52} />
-        <div>
-          <h1 className="serif" style={{ fontSize: 30, fontWeight: 600, letterSpacing: '-0.01em', lineHeight: 1.1 }}>{group.ad}</h1>
-          <p style={{ color: 'var(--ink-faint)', fontSize: 13, marginTop: 2 }}>{members.length} kişi · {expenses.length} harcama</p>
+        <Avatar name={group.ad} id={group.id} size={38} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <h1 className="serif" style={{ fontSize: 18, fontWeight: 600, letterSpacing: '-0.01em', lineHeight: 1.15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{group.ad}</h1>
+          <p style={{ color: 'var(--ink-faint)', fontSize: 11.5, marginTop: 1 }}>{members.length} kişi · {expenses.length} harcama</p>
         </div>
+        <button onClick={share} className="tap" style={{ flexShrink: 0, borderRadius: 999, padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 5, background: 'var(--paper-2)', border: 'none', color: 'var(--ink-soft)', fontSize: 11.5, fontWeight: 600 }}>
+          {copied ? <Check size={13} color="var(--olive)" /> : <Share2 size={13} />}
+          <span style={{ fontFamily: 'monospace', letterSpacing: '0.06em' }}>{copied ? 'OK' : group.kod}</span>
+        </button>
       </div>
 
       <div style={{ display: 'flex', gap: 4, background: 'var(--paper-2)', borderRadius: 13, padding: 4, marginBottom: 20 }}>
