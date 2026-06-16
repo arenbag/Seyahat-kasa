@@ -150,7 +150,7 @@ export default function App() {
 
   return (
     <div style={{ minHeight: '100vh', width: '100%' }}>
-      <div style={{ maxWidth: 600, margin: '0 auto', padding: view === 'home' ? '0 18px 120px' : 'calc(env(safe-area-inset-top) + 16px) 18px 120px' }}>
+      <div style={{ maxWidth: 600, margin: '0 auto', padding: (view === 'home' || view === 'group') ? '0 18px 120px' : 'calc(env(safe-area-inset-top) + 16px) 18px 120px' }}>
         {view === 'home' && <HomeView session={session} myGroups={myGroups} loadingGroups={loadingGroups}
           onOpenGroup={(id) => { setActiveGroupId(id); setView('group'); }}
           onNewGroup={() => setView('newGroup')} onJoinGroup={() => setView('joinGroup')} onLogout={logout} />}
@@ -542,8 +542,9 @@ function GroupView({ groupId, session, onBack, onLeave, onDeleted }) {
 
   return (
     <>
-    <div className="rise">
-      <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18, padding: 11 }}>
+    <div>
+      <div style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--paper)', margin: '0 -18px', padding: '0 18px', paddingTop: 'calc(env(safe-area-inset-top) + 14px)', paddingBottom: 10 }}>
+      <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, padding: 11 }}>
         <button onClick={onBack} className="tap" title="Gruplar"
           style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, background: 'var(--paper-2)', border: 'none', color: 'var(--ink-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <ChevronLeft size={19} />
@@ -566,7 +567,7 @@ function GroupView({ groupId, session, onBack, onLeave, onDeleted }) {
         </button>
       </div>
 
-      <div style={{ display: 'flex', gap: 4, background: 'var(--paper-2)', borderRadius: 13, padding: 4, marginBottom: 20 }}>
+      <div style={{ display: 'flex', gap: 4, background: 'var(--paper-2)', borderRadius: 13, padding: 4 }}>
         {tabs.map(t => (
           <button key={t.k} onClick={() => setTab(t.k)} className="tap"
             style={{ flex: 1, borderRadius: 10, padding: '10px 0', fontSize: 13, fontWeight: 600, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
@@ -575,10 +576,13 @@ function GroupView({ groupId, session, onBack, onLeave, onDeleted }) {
           </button>
         ))}
       </div>
+      </div>
 
-      {activeTab === 'expenses' && <ExpensesTab group={group} members={members} expenses={expenses} katilanlar={katilanlar} reload={reload} isOwner={isOwner} onEdit={(e) => setEditExpense(e)} />}
-      {activeTab === 'balances' && <BalancesTab group={group} members={members} expenses={expenses} transfers={transfers} reload={reload} isOwner={isOwner} />}
-      {activeTab === 'settings' && isOwner && <SettingsTab group={group} members={members} expenses={expenses} transfers={transfers} katilanlar={katilanlar} reload={reload} onLeave={onLeave} onDeleted={onDeleted} />}
+      <div style={{ paddingTop: 16 }}>
+        {activeTab === 'expenses' && <ExpensesTab group={group} members={members} expenses={expenses} katilanlar={katilanlar} reload={reload} isOwner={isOwner} onEdit={(e) => setEditExpense(e)} />}
+        {activeTab === 'balances' && <BalancesTab group={group} members={members} expenses={expenses} transfers={transfers} reload={reload} isOwner={isOwner} />}
+        {activeTab === 'settings' && isOwner && <SettingsTab group={group} members={members} expenses={expenses} transfers={transfers} katilanlar={katilanlar} reload={reload} onLeave={onLeave} onDeleted={onDeleted} />}
+      </div>
     </div>
 
     {(showNewExpense || editExpense) && <NewExpenseModal group={group} members={members} session={session} expense={editExpense}
