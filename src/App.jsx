@@ -4,6 +4,10 @@ import { Plus, Users, Receipt, ArrowRightLeft, Trash2, Check, X, Plane, Coins, C
   LogOut, User, Lock, AtSign, ArrowRight, Eye, EyeOff, Pencil, Image as ImageIcon, Camera, Calendar } from 'lucide-react';
 import { supabase } from './supabase';
 
+// Yalnızca bu kullanıcı adları yeni grup oluşturabilir (diğerleri sadece gruba katılır).
+const SUPER_ADMINS = ['arenbag'];
+const isSuperAdmin = (session) => !!session && SUPER_ADMINS.includes(session.kullanici_adi);
+
 const CURRENCY_SYMBOLS = { TRY: '₺', EUR: '€', USD: '$', GBP: '£', JPY: '¥', CHF: 'Fr', AED: 'د.إ' };
 const DEFAULT_RATES = { TRY: 1, EUR: 53.6, USD: 46.3, GBP: 61.85, JPY: 0.29, CHF: 58.34, AED: 12.61 };
 
@@ -154,7 +158,7 @@ export default function App() {
         {view === 'home' && <HomeView session={session} myGroups={myGroups} loadingGroups={loadingGroups}
           onOpenGroup={(id) => { setActiveGroupId(id); setView('group'); }}
           onNewGroup={() => setView('newGroup')} onJoinGroup={() => setView('joinGroup')} onLogout={logout} />}
-        {view === 'newGroup' && <NewGroupView session={session}
+        {view === 'newGroup' && isSuperAdmin(session) && <NewGroupView session={session}
           onCreated={(g) => { addToMyGroups(g); setActiveGroupId(g.id); setView('group'); }}
           onBack={() => setView('home')} />}
         {view === 'joinGroup' && <JoinGroupView
@@ -303,7 +307,8 @@ function HomeView({ session, myGroups, loadingGroups, onOpenGroup, onNewGroup, o
           </button>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isSuperAdmin(session) ? '1fr 1fr' : '1fr', gap: 12, marginBottom: 16 }}>
+          {isSuperAdmin(session) && (
           <button onClick={onNewGroup} className="card tap" style={{ padding: 14, textAlign: 'left', border: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ width: 38, height: 38, borderRadius: 11, background: 'rgba(193,96,47,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <Plus color="var(--terracotta)" size={20} strokeWidth={2.4} />
@@ -313,6 +318,7 @@ function HomeView({ session, myGroups, loadingGroups, onOpenGroup, onNewGroup, o
               <div style={{ color: 'var(--ink-faint)', fontSize: 12.5, marginTop: 1 }}>Seyahat başlat</div>
             </div>
           </button>
+          )}
           <button onClick={onJoinGroup} className="card tap" style={{ padding: 14, textAlign: 'left', border: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ width: 38, height: 38, borderRadius: 11, background: 'rgba(63,107,107,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <Users color="var(--teal)" size={20} strokeWidth={2.2} />
