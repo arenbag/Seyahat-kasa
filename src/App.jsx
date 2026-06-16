@@ -25,6 +25,30 @@ const payersOf = (e) => (Array.isArray(e.odeyenler) && e.odeyenler.length)
   ? e.odeyenler
   : [{ id: e.odeyen_id, tutar: e.tutar }];
 
+// Fotoğrafı yüklemeden önce tarayıcıda küçültüp JPEG'e sıkıştırır (depolama tasarrufu)
+async function compressImage(file, maxDim = 1600, quality = 0.72) {
+  if (!file || !file.type?.startsWith('image/')) return file;
+  try {
+    const dataUrl = await new Promise((res, rej) => {
+      const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(file);
+    });
+    const img = await new Promise((res, rej) => {
+      const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = dataUrl;
+    });
+    let { width, height } = img;
+    if (width > maxDim || height > maxDim) {
+      if (width >= height) { height = Math.round(height * maxDim / width); width = maxDim; }
+      else { width = Math.round(width * maxDim / height); height = maxDim; }
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = width; canvas.height = height;
+    canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+    const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', quality));
+    if (!blob || blob.size >= file.size) return file; // sıkıştırma fayda etmediyse orijinali bırak
+    return new File([blob], (file.name || 'foto').replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
+  } catch { return file; }
+}
+
 // Grup tarih aralığını "12 Tem – 18 Tem 2026" gibi biçimler (yoksa null)
 const dateRangeLabel = (g) => {
   const s = g?.baslangic_tarihi, e = g?.bitis_tarihi;
@@ -705,9 +729,10 @@ function NewExpenseModal({ group, members, session, expense, onClose, onSaved })
     let finalFoto = fotoUrl;
     if (fotoFile) {
       try {
-        const ext = (fotoFile.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+        const toUpload = await compressImage(fotoFile);
+        const ext = toUpload.type === 'image/jpeg' ? 'jpg' : ((toUpload.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg');
         const path = `${group.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-        const { error: upErr } = await supabase.storage.from('fisler').upload(path, fotoFile, { cacheControl: '3600', upsert: false });
+        const { error: upErr } = await supabase.storage.from('fisler').upload(path, toUpload, { cacheControl: '3600', upsert: false, contentType: toUpload.type });
         if (upErr) throw upErr;
         finalFoto = supabase.storage.from('fisler').getPublicUrl(path).data.publicUrl;
       } catch (err) { setUploadErr('Fotoğraf yüklenemedi: ' + (err.message || 'bilinmeyen')); setSaving(false); return; }
