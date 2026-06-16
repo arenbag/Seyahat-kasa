@@ -121,7 +121,8 @@ export default function App() {
           onBack={() => setView('home')} />}
         {view === 'group' && <GroupView groupId={activeGroupId}
           onBack={() => setView('home')}
-          onLeave={() => { removeFromMyGroups(activeGroupId); setView('home'); }} />}
+          onLeave={() => { removeFromMyGroups(activeGroupId); setView('home'); }}
+          onDeleted={() => { setView('home'); loadGroups(session.id); }} />}
       </div>
     </div>
   );
@@ -437,7 +438,7 @@ function JoinGroupView({ onJoined, onBack }) {
   );
 }
 
-function GroupView({ groupId, onBack, onLeave }) {
+function GroupView({ groupId, onBack, onLeave, onDeleted }) {
   const [group, setGroup] = useState(null);
   const [members, setMembers] = useState([]);
   const [expenses, setExpenses] = useState([]);
@@ -497,7 +498,7 @@ function GroupView({ groupId, onBack, onLeave }) {
 
       {tab === 'expenses' && <ExpensesTab group={group} members={members} expenses={expenses} reload={reload} />}
       {tab === 'balances' && <BalancesTab group={group} members={members} expenses={expenses} />}
-      {tab === 'settings' && <SettingsTab group={group} members={members} expenses={expenses} reload={reload} onLeave={onLeave} />}
+      {tab === 'settings' && <SettingsTab group={group} members={members} expenses={expenses} reload={reload} onLeave={onLeave} onDeleted={onDeleted} />}
 
       {showNewExpense && <NewExpenseModal group={group} members={members} onClose={() => setShowNewExpense(false)} onSaved={() => { setShowNewExpense(false); reload(); }} />}
 
@@ -808,10 +809,27 @@ function BalancesTab({ group, members, expenses }) {
   );
 }
 
-function SettingsTab({ group, members, expenses, reload, onLeave }) {
+function SettingsTab({ group, members, expenses, reload, onLeave, onDeleted }) {
   const [rates, setRates] = useState(group.kurlar);
   const [newMember, setNewMember] = useState('');
   const [savingRates, setSavingRates] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const canDelete = expenses.length === 0;
+  const deleteGroup = async () => {
+    if (!canDelete || deleting) return;
+    if (!confirm(`"${group.ad}" grubunu kalıcı olarak silmek istediğine emin misin? Bu işlem geri alınamaz.`)) return;
+    setDeleting(true);
+    try {
+      // Güvenlik için önce alt kayıtlar (harcama boş olmalı), sonra grup
+      await supabase.from('harcamalar').delete().eq('grup_id', group.id);
+      await supabase.from('uyeler').delete().eq('grup_id', group.id);
+      await supabase.from('kullanici_gruplari').delete().eq('grup_id', group.id);
+      const { error } = await supabase.from('gruplar').delete().eq('id', group.id);
+      if (error) throw error;
+      onDeleted();
+    } catch (err) { alert('Grup silinemedi: ' + (err.message || 'bilinmeyen')); setDeleting(false); }
+  };
 
   const saveRates = async () => { setSavingRates(true); await supabase.from('gruplar').update({ kurlar: rates }).eq('id', group.id); setSavingRates(false); reload(); };
   const addMember = async () => { if (!newMember.trim()) return; await supabase.from('uyeler').insert({ grup_id: group.id, ad: newMember.trim() }); setNewMember(''); reload(); };
@@ -869,6 +887,21 @@ function SettingsTab({ group, members, expenses, reload, onLeave }) {
         Bu grubu listemden kaldır
       </button>
       <p style={{ color: 'var(--ink-faint)', fontSize: 12, textAlign: 'center', marginTop: -10 }}>Grup verisi silinmez, kodla tekrar katılabilirsin.</p>
+
+      <div style={{ borderTop: '1px solid var(--line)', marginTop: 4, paddingTop: 18 }}>
+        <h3 className="label" style={{ color: 'var(--berry)' }}>Tehlikeli Bölge</h3>
+        <button onClick={deleteGroup} disabled={!canDelete || deleting} className="tap"
+          style={{ width: '100%', borderRadius: 13, padding: 13, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, border: 'none',
+            ...(canDelete ? { background: 'var(--berry)', color: '#fff' } : { background: 'var(--paper-2)', color: 'var(--ink-faint)', cursor: 'not-allowed' }) }}>
+          {deleting ? <Loader2 size={16} className="spin" /> : <Trash2 size={16} />}
+          {deleting ? 'Siliniyor...' : 'Grubu kalıcı olarak sil'}
+        </button>
+        <p style={{ color: 'var(--ink-faint)', fontSize: 12, textAlign: 'center', marginTop: 8 }}>
+          {canDelete
+            ? 'Grup ve tüm üyeleri herkes için kalıcı olarak silinir, geri alınamaz.'
+            : `İçinde ${expenses.length} harcama var. Silmek için önce tüm harcamaları kaldır.`}
+        </p>
+      </div>
     </div>
   );
 }
