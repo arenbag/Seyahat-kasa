@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Plus, Users, Receipt, ArrowRightLeft, Trash2, Check, X, Plane, Coins, ChevronLeft, Copy, Loader2, Share2,
   UtensilsCrossed, Car, BedDouble, Ticket, ShoppingBag, Plane as PlaneIcon, Wine, MoreHorizontal, TrendingUp,
-  LogOut, User, Lock, AtSign, ArrowRight, Eye, EyeOff, Pencil, Image as ImageIcon, Camera } from 'lucide-react';
+  LogOut, User, Lock, AtSign, ArrowRight, Eye, EyeOff, Pencil, Image as ImageIcon, Camera, Calendar } from 'lucide-react';
 import { supabase } from './supabase';
 
 const CURRENCY_SYMBOLS = { TRY: '₺', EUR: '€', USD: '$', GBP: '£', JPY: '¥', CHF: 'Fr', AED: 'د.إ' };
@@ -24,6 +24,15 @@ const catOf = (id) => CATEGORIES.find(c => c.id === id) || CATEGORIES[CATEGORIES
 const payersOf = (e) => (Array.isArray(e.odeyenler) && e.odeyenler.length)
   ? e.odeyenler
   : [{ id: e.odeyen_id, tutar: e.tutar }];
+
+// Grup tarih aralığını "12 Tem – 18 Tem 2026" gibi biçimler (yoksa null)
+const dateRangeLabel = (g) => {
+  const s = g?.baslangic_tarihi, e = g?.bitis_tarihi;
+  if (!s && !e) return null;
+  const f = (d, yil) => new Date(d + 'T00:00:00').toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', ...(yil ? { year: 'numeric' } : {}) });
+  if (s && e) return `${f(s)} – ${f(e, true)}`;
+  return f(s || e, true);
+};
 
 const AVATAR_COLORS = ['#c1602f', '#3f6b6b', '#6f7a4f', '#b8893f', '#9e4b54', '#8a5a9e', '#4a6d9e', '#a0612f'];
 const avatarColor = (id) => {
@@ -323,6 +332,8 @@ function NewGroupView({ session, onCreated, onBack }) {
   const [ad, setAd] = useState('');
   const [members, setMembers] = useState(['']);
   const [baseCurrency, setBaseCurrency] = useState('TRY');
+  const [baslangic, setBaslangic] = useState('');
+  const [bitis, setBitis] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -337,7 +348,7 @@ function NewGroupView({ session, onCreated, onBack }) {
     try {
       const kod = groupCode();
       const { data: grup, error: e1 } = await supabase.from('gruplar')
-        .insert({ kod, ad: ad.trim(), ana_para_birimi: baseCurrency, kurlar: DEFAULT_RATES, olusturan_id: session?.id || null }).select().single();
+        .insert({ kod, ad: ad.trim(), ana_para_birimi: baseCurrency, kurlar: DEFAULT_RATES, olusturan_id: session?.id || null, baslangic_tarihi: baslangic || null, bitis_tarihi: bitis || null }).select().single();
       if (e1) throw e1;
       const uyeRows = members.filter(m => m.trim()).map(m => ({ grup_id: grup.id, ad: m.trim() }));
       const { error: e2 } = await supabase.from('uyeler').insert(uyeRows);
@@ -372,6 +383,16 @@ function NewGroupView({ session, onCreated, onBack }) {
             ))}
           </div>
           <p style={{ color: 'var(--ink-faint)', fontSize: 12, marginTop: 8 }}>Sonuçlar bu para biriminde gösterilecek.</p>
+        </div>
+
+        <div>
+          <label className="label">Tarihler (opsiyonel)</label>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input type="date" value={baslangic} onChange={e => setBaslangic(e.target.value)} className="input" style={{ flex: 1 }} />
+            <span style={{ color: 'var(--ink-faint)' }}>–</span>
+            <input type="date" value={bitis} min={baslangic || undefined} onChange={e => setBitis(e.target.value)} className="input" style={{ flex: 1 }} />
+          </div>
+          <p style={{ color: 'var(--ink-faint)', fontSize: 12, marginTop: 8 }}>Hangi tarihler arasında gidiliyor?</p>
         </div>
 
         <div>
@@ -484,15 +505,22 @@ function GroupView({ groupId, session, onBack, onLeave, onDeleted }) {
   return (
     <>
     <div className="rise">
-      <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 18, padding: 11 }}>
+      <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18, padding: 11 }}>
         <button onClick={onBack} className="tap" title="Gruplar"
           style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, background: 'var(--paper-2)', border: 'none', color: 'var(--ink-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <ChevronLeft size={19} />
         </button>
-        <Avatar name={group.ad} id={group.id} size={38} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <h1 className="serif" style={{ fontSize: 18, fontWeight: 600, letterSpacing: '-0.01em', lineHeight: 1.15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{group.ad}</h1>
-          <p style={{ color: 'var(--ink-faint)', fontSize: 11.5, marginTop: 1 }}>{members.length} kişi · {expenses.length} harcama</p>
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+          <Avatar name={group.ad} id={group.id} size={38} />
+          <div style={{ minWidth: 0, textAlign: 'center' }}>
+            <h1 className="serif" style={{ fontSize: 18, fontWeight: 600, letterSpacing: '-0.01em', lineHeight: 1.15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{group.ad}</h1>
+            {dateRangeLabel(group) && (
+              <p style={{ color: 'var(--ink-faint)', fontSize: 11.5, marginTop: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                <Calendar size={11} /> {dateRangeLabel(group)}
+              </p>
+            )}
+            <p style={{ color: 'var(--ink-faint)', fontSize: 11.5, marginTop: 1 }}>{members.length} kişi · {expenses.length} harcama</p>
+          </div>
         </div>
         <button onClick={share} className="tap" style={{ flexShrink: 0, borderRadius: 999, padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 5, background: 'var(--paper-2)', border: 'none', color: 'var(--ink-soft)', fontSize: 11.5, fontWeight: 600 }}>
           {copied ? <Check size={13} color="var(--olive)" /> : <Share2 size={13} />}
