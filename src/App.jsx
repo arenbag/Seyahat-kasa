@@ -470,6 +470,7 @@ function GroupView({ groupId, onBack, onLeave, onDeleted }) {
   if (!group) return <div style={{ textAlign: 'center', color: 'var(--ink-faint)', marginTop: 120 }}>Grup bulunamadı.</div>;
 
   return (
+    <>
     <div className="rise">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
         <BackBtn onBack={onBack} label="Gruplar" noMargin />
@@ -500,18 +501,19 @@ function GroupView({ groupId, onBack, onLeave, onDeleted }) {
       {tab === 'expenses' && <ExpensesTab group={group} members={members} expenses={expenses} reload={reload} onEdit={(e) => setEditExpense(e)} />}
       {tab === 'balances' && <BalancesTab group={group} members={members} expenses={expenses} />}
       {tab === 'settings' && <SettingsTab group={group} members={members} expenses={expenses} reload={reload} onLeave={onLeave} onDeleted={onDeleted} />}
-
-      {(showNewExpense || editExpense) && <NewExpenseModal group={group} members={members} expense={editExpense}
-        onClose={() => { setShowNewExpense(false); setEditExpense(null); }}
-        onSaved={() => { setShowNewExpense(false); setEditExpense(null); reload(); }} />}
-
-      {tab === 'expenses' && !showNewExpense && !editExpense && (
-        <button onClick={() => setShowNewExpense(true)} className="tap"
-          style={{ position: 'fixed', bottom: 26, right: 26, width: 58, height: 58, borderRadius: 999, border: 'none', boxShadow: '0 8px 28px rgba(193,96,47,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 20, background: 'linear-gradient(135deg, var(--terracotta), var(--terracotta-dark))' }}>
-          <Plus color="#fff" size={28} strokeWidth={2.5} />
-        </button>
-      )}
     </div>
+
+    {(showNewExpense || editExpense) && <NewExpenseModal group={group} members={members} expense={editExpense}
+      onClose={() => { setShowNewExpense(false); setEditExpense(null); }}
+      onSaved={() => { setShowNewExpense(false); setEditExpense(null); reload(); }} />}
+
+    {tab === 'expenses' && !showNewExpense && !editExpense && (
+      <button onClick={() => setShowNewExpense(true)} className="tap"
+        style={{ position: 'fixed', bottom: 26, right: 26, width: 58, height: 58, borderRadius: 999, border: 'none', boxShadow: '0 8px 28px rgba(193,96,47,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 20, background: 'linear-gradient(135deg, var(--terracotta), var(--terracotta-dark))' }}>
+        <Plus color="#fff" size={28} strokeWidth={2.5} />
+      </button>
+    )}
+    </>
   );
 }
 
@@ -556,10 +558,12 @@ function ExpensesTab({ group, members, expenses, reload, onEdit }) {
                   <div style={{ color: 'var(--ink-faint)', fontSize: 11.5 }}>≈ {baseSym}{formatNum(baseAmt)}</div>
                 )}
               </div>
-              <button onClick={() => onEdit(e)} className="tap" style={{ color: 'var(--ink-faint)', background: 'none', border: 'none', padding: 4, marginLeft: 2 }} title="Düzenle">
+              <button onClick={() => onEdit(e)} className="tap" title="Düzenle"
+                style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, marginLeft: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--terracotta)', background: 'rgba(193,96,47,0.1)', border: 'none' }}>
                 <Pencil size={15} />
               </button>
-              <button onClick={() => deleteExpense(e.id)} className="tap" style={{ color: 'var(--ink-faint)', background: 'none', border: 'none', padding: 4 }} title="Sil">
+              <button onClick={() => deleteExpense(e.id)} className="tap" title="Sil"
+                style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, marginLeft: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--berry)', background: 'rgba(158,75,84,0.1)', border: 'none' }}>
                 <Trash2 size={15} />
               </button>
             </div>
