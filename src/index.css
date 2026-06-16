@@ -47,8 +47,10 @@ input, button, select, textarea { font-family: inherit; color: inherit; }
 input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 
-.serif { font-family: 'Fraunces', Georgia, serif; }
-.serif-italic { font-family: 'Fraunces', Georgia, serif; font-style: italic; }
+/* Tüm sistem tek yazı tipi: Albert Sans (sekmelerdeki gövde fontu).
+   .serif sınıfları geriye dönük uyumluluk için duruyor ama artık Albert Sans render eder. */
+.serif { font-family: 'Albert Sans', system-ui, sans-serif; }
+.serif-italic { font-family: 'Albert Sans', system-ui, sans-serif; font-style: italic; }
 
 .card {
   background: var(--card);
