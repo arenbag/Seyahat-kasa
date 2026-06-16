@@ -265,28 +265,24 @@ function HomeView({ session, myGroups, loadingGroups, onOpenGroup, onNewGroup, o
         </button>
       </div>
 
-      <div style={{ marginBottom: 28 }}>
-        <h1 className="serif" style={{ fontSize: 34, lineHeight: 1.12, fontWeight: 600, letterSpacing: '-0.02em' }}>
-          Bir grup aç,<br />
-          <span className="serif-italic" style={{ color: 'var(--terracotta)' }}>kodu paylaş,</span><br />
-          harcamaları kaydet.
-        </h1>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 36 }}>
-        <button onClick={onNewGroup} className="card tap" style={{ padding: 18, textAlign: 'left', border: '1px solid var(--line)' }}>
-          <div style={{ width: 40, height: 40, borderRadius: 11, background: 'rgba(193,96,47,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 32, marginTop: 8 }}>
+        <button onClick={onNewGroup} className="card tap" style={{ padding: 14, textAlign: 'left', border: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 11, background: 'rgba(193,96,47,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <Plus color="var(--terracotta)" size={20} strokeWidth={2.4} />
           </div>
-          <div style={{ fontWeight: 600, fontSize: 15 }}>Yeni Grup</div>
-          <div style={{ color: 'var(--ink-faint)', fontSize: 12.5, marginTop: 2 }}>Seyahat başlat</div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: 600, fontSize: 15 }}>Yeni Grup</div>
+            <div style={{ color: 'var(--ink-faint)', fontSize: 12.5, marginTop: 1 }}>Seyahat başlat</div>
+          </div>
         </button>
-        <button onClick={onJoinGroup} className="card tap" style={{ padding: 18, textAlign: 'left', border: '1px solid var(--line)' }}>
-          <div style={{ width: 40, height: 40, borderRadius: 11, background: 'rgba(63,107,107,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
+        <button onClick={onJoinGroup} className="card tap" style={{ padding: 14, textAlign: 'left', border: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 11, background: 'rgba(63,107,107,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <Users color="var(--teal)" size={20} strokeWidth={2.2} />
           </div>
-          <div style={{ fontWeight: 600, fontSize: 15 }}>Gruba Katıl</div>
-          <div style={{ color: 'var(--ink-faint)', fontSize: 12.5, marginTop: 2 }}>Kodu gir</div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: 600, fontSize: 15 }}>Gruba Katıl</div>
+            <div style={{ color: 'var(--ink-faint)', fontSize: 12.5, marginTop: 1 }}>Kodu gir</div>
+          </div>
         </button>
       </div>
 
