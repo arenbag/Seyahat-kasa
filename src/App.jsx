@@ -449,6 +449,7 @@ function GroupView({ groupId, session, onBack, onLeave, onDeleted }) {
   const [members, setMembers] = useState([]);
   const [expenses, setExpenses] = useState([]);
   const [transfers, setTransfers] = useState([]);
+  const [katilanlar, setKatilanlar] = useState([]);
   const [tab, setTab] = useState('expenses');
   const [showNewExpense, setShowNewExpense] = useState(false);
   const [editExpense, setEditExpense] = useState(null);
@@ -460,7 +461,8 @@ function GroupView({ groupId, session, onBack, onLeave, onDeleted }) {
     const { data: u } = await supabase.from('uyeler').select('*').eq('grup_id', groupId).order('olusturma_tarihi');
     const { data: h } = await supabase.from('harcamalar').select('*').eq('grup_id', groupId).order('olusturma_tarihi', { ascending: false });
     const { data: t } = await supabase.from('transferler').select('*').eq('grup_id', groupId).order('olusturma_tarihi', { ascending: false });
-    setGroup(g); setMembers(u || []); setExpenses(h || []); setTransfers(t || []); setLoading(false);
+    const { data: k } = await supabase.from('kullanici_gruplari').select('kullanici_id, olusturma_tarihi, kullanicilar(kullanici_adi)').eq('grup_id', groupId).order('olusturma_tarihi');
+    setGroup(g); setMembers(u || []); setExpenses(h || []); setTransfers(t || []); setKatilanlar(k || []); setLoading(false);
   }, [groupId]);
 
   useEffect(() => { reload(); }, [reload]);
@@ -514,7 +516,7 @@ function GroupView({ groupId, session, onBack, onLeave, onDeleted }) {
 
       {activeTab === 'expenses' && <ExpensesTab group={group} members={members} expenses={expenses} reload={reload} isOwner={isOwner} onEdit={(e) => setEditExpense(e)} />}
       {activeTab === 'balances' && <BalancesTab group={group} members={members} expenses={expenses} transfers={transfers} reload={reload} isOwner={isOwner} />}
-      {activeTab === 'settings' && isOwner && <SettingsTab group={group} members={members} expenses={expenses} transfers={transfers} reload={reload} onLeave={onLeave} onDeleted={onDeleted} />}
+      {activeTab === 'settings' && isOwner && <SettingsTab group={group} members={members} expenses={expenses} transfers={transfers} katilanlar={katilanlar} reload={reload} onLeave={onLeave} onDeleted={onDeleted} />}
     </div>
 
     {(showNewExpense || editExpense) && <NewExpenseModal group={group} members={members} expense={editExpense}
@@ -1083,7 +1085,7 @@ function TransferModal({ group, members, prefill, onClose, onSaved }) {
   );
 }
 
-function SettingsTab({ group, members, expenses, transfers, reload, onLeave, onDeleted }) {
+function SettingsTab({ group, members, expenses, transfers, katilanlar = [], reload, onLeave, onDeleted }) {
   const baseCur = group.ana_para_birimi;
   const baseRate = Number(group.kurlar?.[baseCur]) || 1;
   // Kurları ana para birimi cinsine normalize edip metin olarak tut (yazarken ondalık/virgül kaybolmasın)
@@ -1161,6 +1163,32 @@ function SettingsTab({ group, members, expenses, transfers, reload, onLeave, onD
           <input value={newMember} onChange={e => setNewMember(e.target.value)} placeholder="Yeni üye ismi" className="input" style={{ flex: 1 }} />
           <button onClick={addMember} className="tap" style={{ borderRadius: 12, padding: '0 18px', background: 'var(--ink)', color: '#fff', fontWeight: 600, border: 'none' }}>Ekle</button>
         </div>
+        <p style={{ color: 'var(--ink-faint)', fontSize: 12, marginTop: 12 }}>Üyeler, harcamaların bölüşüldüğü kişilerdir (hesap sahibi olmaları gerekmez).</p>
+      </div>
+
+      <div className="card" style={{ padding: 20 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 14 }}>
+          <h3 style={{ fontWeight: 600, fontSize: 15 }} className="serif">Gruba Katılanlar</h3>
+          <span style={{ color: 'var(--ink-faint)', fontSize: 12.5 }}>{katilanlar.length} kişi</span>
+        </div>
+        {katilanlar.length === 0 ? (
+          <p style={{ color: 'var(--ink-faint)', fontSize: 13 }}>Henüz kimse koddan katılmadı.</p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {katilanlar.map(k => {
+              const ad = k.kullanicilar?.kullanici_adi || '—';
+              const owner = k.kullanici_id === group.olusturan_id;
+              return (
+                <div key={k.kullanici_id} style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+                  <Avatar name={ad} id={k.kullanici_id} size={34} />
+                  <span style={{ flex: 1, fontSize: 14.5 }}>@{ad}</span>
+                  {owner && <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--terracotta)', background: 'rgba(193,96,47,0.1)', padding: '3px 9px', borderRadius: 999 }}>Kurucu</span>}
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <p style={{ color: 'var(--ink-faint)', fontSize: 12, marginTop: 12 }}>Kodla gruba katılıp uygulamada açan hesaplar.</p>
       </div>
 
       <div className="card" style={{ padding: 20 }}>
