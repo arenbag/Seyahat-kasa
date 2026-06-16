@@ -1018,7 +1018,18 @@ function TransferModal({ group, members, prefill, onClose, onSaved }) {
 }
 
 function SettingsTab({ group, members, expenses, transfers, reload, onLeave, onDeleted }) {
-  const [rates, setRates] = useState(group.kurlar);
+  const baseCur = group.ana_para_birimi;
+  const baseRate = Number(group.kurlar?.[baseCur]) || 1;
+  // Kurları ana para birimi cinsine normalize edip metin olarak tut (yazarken ondalık/virgül kaybolmasın)
+  const [rates, setRates] = useState(() => {
+    const o = {};
+    Object.keys(CURRENCY_SYMBOLS).forEach(c => {
+      if (c === baseCur) return;
+      const v = group.kurlar?.[c];
+      if (v != null) o[c] = String(Math.round((v / baseRate) * 1e6) / 1e6).replace('.', ',');
+    });
+    return o;
+  });
   const [newMember, setNewMember] = useState('');
   const [savingRates, setSavingRates] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -1040,7 +1051,18 @@ function SettingsTab({ group, members, expenses, transfers, reload, onLeave, onD
     } catch (err) { alert('Grup silinemedi: ' + (err.message || 'bilinmeyen')); setDeleting(false); }
   };
 
-  const saveRates = async () => { setSavingRates(true); await supabase.from('gruplar').update({ kurlar: rates }).eq('id', group.id); setSavingRates(false); reload(); };
+  const saveRates = async () => {
+    setSavingRates(true);
+    const numeric = { [baseCur]: 1 };
+    Object.keys(CURRENCY_SYMBOLS).forEach(c => {
+      if (c === baseCur) return;
+      const n = parseFloat(String(rates[c] ?? '').replace(',', '.'));
+      const fallback = group.kurlar?.[c] != null ? group.kurlar[c] / baseRate : 1;
+      numeric[c] = n > 0 ? n : fallback;
+    });
+    await supabase.from('gruplar').update({ kurlar: numeric }).eq('id', group.id);
+    setSavingRates(false); reload();
+  };
   const addMember = async () => { if (!newMember.trim()) return; await supabase.from('uyeler').insert({ grup_id: group.id, ad: newMember.trim() }); setNewMember(''); reload(); };
   const removeMember = async (id) => {
     const inExpense = expenses.some(e => e.odeyen_id === id || (e.odeyenler || []).some(p => p.id === id) || e.bolusenler.includes(id));
@@ -1077,13 +1099,15 @@ function SettingsTab({ group, members, expenses, transfers, reload, onLeave, onD
 
       <div className="card" style={{ padding: 20 }}>
         <h3 style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }} className="serif">Döviz Kurları</h3>
-        <p style={{ color: 'var(--ink-faint)', fontSize: 12.5, marginBottom: 14 }}>1 birim = kaç {group.ana_para_birimi}?</p>
+        <p style={{ color: 'var(--ink-faint)', fontSize: 12.5, marginBottom: 14 }}>1 birim = kaç {group.ana_para_birimi}? (örn. 1 TRY = 0,019 {group.ana_para_birimi})</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
           {Object.keys(CURRENCY_SYMBOLS).filter(c => c !== group.ana_para_birimi).map(c => (
             <div key={c} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ width: 52, fontSize: 13.5, fontFamily: 'monospace', color: 'var(--ink-soft)' }}>1 {c}</span>
               <span style={{ color: 'var(--ink-faint)' }}>=</span>
-              <input type="number" inputMode="decimal" value={rates[c] || ''} onChange={e => setRates({ ...rates, [c]: parseFloat(e.target.value) || 0 })} className="input" style={{ flex: 1 }} />
+              <input type="text" inputMode="decimal" value={rates[c] ?? ''}
+                onChange={e => setRates({ ...rates, [c]: e.target.value.replace(/[^0-9.,]/g, '') })}
+                placeholder="0,00" className="input" style={{ flex: 1 }} />
               <span style={{ width: 40, fontSize: 13.5, fontFamily: 'monospace', color: 'var(--ink-soft)' }}>{group.ana_para_birimi}</span>
             </div>
           ))}
