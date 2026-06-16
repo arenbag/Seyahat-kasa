@@ -5,7 +5,7 @@ import { Plus, Users, Receipt, ArrowRightLeft, Trash2, Check, X, Plane, Coins, C
 import { supabase } from './supabase';
 
 const CURRENCY_SYMBOLS = { TRY: '₺', EUR: '€', USD: '$', GBP: '£', JPY: '¥', CHF: 'Fr', AED: 'د.إ' };
-const DEFAULT_RATES = { TRY: 1, EUR: 45.5, USD: 42.0, GBP: 53.0, JPY: 0.27, CHF: 47.5, AED: 11.4 };
+const DEFAULT_RATES = { TRY: 1, EUR: 53.6, USD: 46.3, GBP: 61.85, JPY: 0.29, CHF: 58.34, AED: 12.61 };
 
 const CATEGORIES = [
   { id: 'yemek', label: 'Yemek', Icon: UtensilsCrossed, color: '#c1602f' },
@@ -1221,7 +1221,8 @@ function SettingsTab({ group, members, expenses, transfers, katilanlar = [], rel
 
       <div className="card" style={{ padding: 20 }}>
         <h3 style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }} className="serif">Döviz Kurları</h3>
-        <p style={{ color: 'var(--ink-faint)', fontSize: 12.5, marginBottom: 14 }}>1 birim = kaç {group.ana_para_birimi}? (örn. 1 TRY = 0,019 {group.ana_para_birimi})</p>
+        <p style={{ color: 'var(--ink-faint)', fontSize: 12.5, marginBottom: 6 }}>1 birim = kaç {group.ana_para_birimi}? (örn. 1 TRY = 0,019 {group.ana_para_birimi})</p>
+        <p style={{ color: 'var(--berry)', fontSize: 11.5, marginBottom: 14 }}>⚠ Sistemin otomatik atadığı rakamlar. Lütfen kontrol ediniz.</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
           {Object.keys(CURRENCY_SYMBOLS).filter(c => c !== group.ana_para_birimi).map(c => (
             <div key={c} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
