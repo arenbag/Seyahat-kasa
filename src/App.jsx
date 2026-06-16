@@ -514,16 +514,16 @@ function GroupView({ groupId, session, onBack, onLeave, onDeleted }) {
         ))}
       </div>
 
-      {activeTab === 'expenses' && <ExpensesTab group={group} members={members} expenses={expenses} reload={reload} isOwner={isOwner} onEdit={(e) => setEditExpense(e)} />}
+      {activeTab === 'expenses' && <ExpensesTab group={group} members={members} expenses={expenses} katilanlar={katilanlar} reload={reload} isOwner={isOwner} onEdit={(e) => setEditExpense(e)} />}
       {activeTab === 'balances' && <BalancesTab group={group} members={members} expenses={expenses} transfers={transfers} reload={reload} isOwner={isOwner} />}
       {activeTab === 'settings' && isOwner && <SettingsTab group={group} members={members} expenses={expenses} transfers={transfers} katilanlar={katilanlar} reload={reload} onLeave={onLeave} onDeleted={onDeleted} />}
     </div>
 
-    {(showNewExpense || editExpense) && <NewExpenseModal group={group} members={members} expense={editExpense}
+    {(showNewExpense || editExpense) && <NewExpenseModal group={group} members={members} session={session} expense={editExpense}
       onClose={() => { setShowNewExpense(false); setEditExpense(null); }}
       onSaved={() => { setShowNewExpense(false); setEditExpense(null); reload(); }} />}
 
-    {isOwner && activeTab === 'expenses' && !showNewExpense && !editExpense && (
+    {activeTab === 'expenses' && !showNewExpense && !editExpense && (
       <button onClick={() => setShowNewExpense(true)} className="tap"
         style={{ position: 'fixed', bottom: 26, right: 26, width: 58, height: 58, borderRadius: 999, border: 'none', boxShadow: '0 8px 28px rgba(193,96,47,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 20, background: 'linear-gradient(135deg, var(--terracotta), var(--terracotta-dark))' }}>
         <Plus color="#fff" size={28} strokeWidth={2.5} />
@@ -533,9 +533,10 @@ function GroupView({ groupId, session, onBack, onLeave, onDeleted }) {
   );
 }
 
-function ExpensesTab({ group, members, expenses, reload, onEdit, isOwner }) {
+function ExpensesTab({ group, members, expenses, katilanlar = [], reload, onEdit, isOwner }) {
   const baseSym = CURRENCY_SYMBOLS[group.ana_para_birimi] || group.ana_para_birimi;
   const [viewImg, setViewImg] = useState(null);
+  const adderName = (id) => katilanlar.find(k => k.kullanici_id === id)?.kullanicilar?.kullanici_adi;
   const deleteExpense = async (id) => {
     if (!confirm('Bu harcamayı silmek istediğinden emin misin?')) return;
     await supabase.from('harcamalar').delete().eq('id', id); reload();
@@ -571,6 +572,11 @@ function ExpensesTab({ group, members, expenses, reload, onEdit, isOwner }) {
                 <div style={{ color: 'var(--ink-faint)', fontSize: 12.5, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   <span style={{ color: 'var(--ink-soft)', fontWeight: 500 }}>{payerLabel}</span> ödedi · {e.bolusenler.length} kişi
                 </div>
+                {adderName(e.ekleyen_id) && (
+                  <div style={{ color: 'var(--ink-faint)', fontSize: 11.5, marginTop: 1, display: 'flex', alignItems: 'center', gap: 3 }}>
+                    <AtSign size={10} />{adderName(e.ekleyen_id)} ekledi
+                  </div>
+                )}
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
                 <div className="serif" style={{ fontWeight: 600, fontSize: 16 }}>{CURRENCY_SYMBOLS[e.para_birimi]}{formatNum(e.tutar)}</div>
@@ -584,12 +590,10 @@ function ExpensesTab({ group, members, expenses, reload, onEdit, isOwner }) {
                   <ImageIcon size={15} />
                 </button>
               )}
-              {isOwner && (
-                <button onClick={() => onEdit(e)} className="tap" title="Düzenle"
-                  style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, marginLeft: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--terracotta)', background: 'rgba(193,96,47,0.1)', border: 'none' }}>
-                  <Pencil size={15} />
-                </button>
-              )}
+              <button onClick={() => onEdit(e)} className="tap" title="Düzenle"
+                style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, marginLeft: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--terracotta)', background: 'rgba(193,96,47,0.1)', border: 'none' }}>
+                <Pencil size={15} />
+              </button>
               {isOwner && (
                 <button onClick={() => deleteExpense(e.id)} className="tap" title="Sil"
                   style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, marginLeft: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--berry)', background: 'rgba(158,75,84,0.1)', border: 'none' }}>
@@ -618,7 +622,7 @@ function ExpensesTab({ group, members, expenses, reload, onEdit, isOwner }) {
   );
 }
 
-function NewExpenseModal({ group, members, expense, onClose, onSaved }) {
+function NewExpenseModal({ group, members, session, expense, onClose, onSaved }) {
   const editing = !!expense;
   const [baslik, setBaslik] = useState(expense?.baslik || '');
   const [tutar, setTutar] = useState(expense != null ? String(expense.tutar) : '');
@@ -676,7 +680,7 @@ function NewExpenseModal({ group, members, expense, onClose, onSaved }) {
       kategori, odeyen_id: payers[0].id, odeyenler, bolusenler, not_metni: notMetni.trim(), foto_url: finalFoto || null,
     };
     if (editing) await supabase.from('harcamalar').update(payload).eq('id', expense.id);
-    else await supabase.from('harcamalar').insert(payload);
+    else await supabase.from('harcamalar').insert({ ...payload, ekleyen_id: session?.id || null });
     onSaved();
   };
 
@@ -1211,10 +1215,16 @@ function SettingsTab({ group, members, expenses, transfers, katilanlar = [], rel
         </button>
       </div>
 
-      <button onClick={onLeave} className="tap" style={{ width: '100%', borderRadius: 13, padding: 13, color: 'var(--berry)', border: '1.5px solid rgba(158,75,84,0.3)', background: 'transparent', fontWeight: 600 }}>
+      <button onClick={onLeave} disabled={!canDelete} className="tap"
+        style={{ width: '100%', borderRadius: 13, padding: 13, fontWeight: 600,
+          ...(canDelete
+            ? { color: 'var(--berry)', border: '1.5px solid rgba(158,75,84,0.3)', background: 'transparent' }
+            : { color: 'var(--ink-faint)', border: '1.5px solid var(--line)', background: 'var(--paper-2)', cursor: 'not-allowed' }) }}>
         Bu grubu listemden kaldır
       </button>
-      <p style={{ color: 'var(--ink-faint)', fontSize: 12, textAlign: 'center', marginTop: -10 }}>Grup verisi silinmez, kodla tekrar katılabilirsin.</p>
+      <p style={{ color: 'var(--ink-faint)', fontSize: 12, textAlign: 'center', marginTop: -10 }}>
+        {canDelete ? 'Grup verisi silinmez, kodla tekrar katılabilirsin.' : 'İçinde harcama olan grubu listenden kaldıramazsın; önce harcamaları sil.'}
+      </p>
 
       <div style={{ borderTop: '1px solid var(--line)', marginTop: 4, paddingTop: 18 }}>
         <h3 className="label" style={{ color: 'var(--berry)' }}>Tehlikeli Bölge</h3>
