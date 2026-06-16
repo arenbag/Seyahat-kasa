@@ -72,9 +72,11 @@ export default function App() {
   const loadGroups = useCallback(async (uid) => {
     if (!uid) return;
     const { data } = await supabase.from('kullanici_gruplari')
-      .select('grup_id, olusturma_tarihi, gruplar(id, ad, kod)')
-      .eq('kullanici_id', uid).order('olusturma_tarihi');
-    setMyGroupsState((data || []).map(r => r.gruplar).filter(Boolean));
+      .select('grup_id, gruplar(id, ad, kod, olusturma_tarihi, baslangic_tarihi, bitis_tarihi)')
+      .eq('kullanici_id', uid);
+    const groups = (data || []).map(r => r.gruplar).filter(Boolean)
+      .sort((a, b) => new Date(b.olusturma_tarihi || 0) - new Date(a.olusturma_tarihi || 0));
+    setMyGroupsState(groups);
     setLoadingGroups(false);
   }, []);
 
@@ -115,7 +117,7 @@ export default function App() {
   if (!session) {
     return (
       <div style={{ minHeight: '100vh', width: '100%' }}>
-        <div style={{ maxWidth: 600, margin: '0 auto', padding: '20px 18px 60px' }}>
+        <div style={{ maxWidth: 600, margin: '0 auto', padding: 'calc(env(safe-area-inset-top) + 20px) 18px 60px' }}>
           <AuthView onAuthed={onAuthed} />
         </div>
       </div>
@@ -124,7 +126,7 @@ export default function App() {
 
   return (
     <div style={{ minHeight: '100vh', width: '100%' }}>
-      <div style={{ maxWidth: 600, margin: '0 auto', padding: '20px 18px 120px' }}>
+      <div style={{ maxWidth: 600, margin: '0 auto', padding: view === 'home' ? '0 18px 120px' : 'calc(env(safe-area-inset-top) + 16px) 18px 120px' }}>
         {view === 'home' && <HomeView session={session} myGroups={myGroups} loadingGroups={loadingGroups}
           onOpenGroup={(id) => { setActiveGroupId(id); setView('group'); }}
           onNewGroup={() => setView('newGroup')} onJoinGroup={() => setView('joinGroup')} onLogout={logout} />}
@@ -256,74 +258,86 @@ function Avatar({ name, id, size = 38 }) {
 
 function HomeView({ session, myGroups, loadingGroups, onOpenGroup, onNewGroup, onJoinGroup, onLogout }) {
   return (
-    <div className="rise">
-      <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 28, marginTop: 8, padding: 12 }}>
-        <div style={{ width: 42, height: 42, borderRadius: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: 'linear-gradient(135deg, var(--terracotta), var(--terracotta-dark))', boxShadow: '0 4px 12px rgba(193,96,47,0.3)' }}>
-          <Plane color="#fff" size={21} strokeWidth={2} />
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div className="serif" style={{ fontSize: 19, fontWeight: 600, letterSpacing: '-0.01em' }}>Seyahat Kasa</div>
-          <div style={{ color: 'var(--ink-faint)', fontSize: 12.5, display: 'flex', alignItems: 'center', gap: 4 }}>
-            <AtSign size={11} /> {session?.kullanici_adi}
+    <div>
+      {/* Sabit üst blok — kaydırırken sabit kalır, güvenli alanı (status bar) bırakır */}
+      <div style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--paper)', margin: '0 -18px', padding: '0 18px',
+        paddingTop: 'calc(env(safe-area-inset-top) + 14px)', paddingBottom: 10 }}>
+        <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, padding: 12 }}>
+          <div style={{ width: 42, height: 42, borderRadius: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'linear-gradient(135deg, var(--terracotta), var(--terracotta-dark))', boxShadow: '0 4px 12px rgba(193,96,47,0.3)' }}>
+            <Plane color="#fff" size={21} strokeWidth={2} />
           </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="serif" style={{ fontSize: 19, fontWeight: 600, letterSpacing: '-0.01em' }}>Seyahat Kasa</div>
+            <div style={{ color: 'var(--ink-faint)', fontSize: 12.5, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <AtSign size={11} /> {session?.kullanici_adi}
+            </div>
+          </div>
+          <button onClick={onLogout} className="tap" title="Çıkış yap"
+            style={{ width: 38, height: 38, borderRadius: 11, background: 'var(--paper-2)', border: 'none', color: 'var(--ink-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <LogOut size={17} />
+          </button>
         </div>
-        <button onClick={onLogout} className="tap" title="Çıkış yap"
-          style={{ width: 38, height: 38, borderRadius: 11, background: 'var(--paper-2)', border: 'none', color: 'var(--ink-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <LogOut size={17} />
-        </button>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+          <button onClick={onNewGroup} className="card tap" style={{ padding: 14, textAlign: 'left', border: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 38, height: 38, borderRadius: 11, background: 'rgba(193,96,47,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Plus color="var(--terracotta)" size={20} strokeWidth={2.4} />
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 600, fontSize: 15 }}>Yeni Grup</div>
+              <div style={{ color: 'var(--ink-faint)', fontSize: 12.5, marginTop: 1 }}>Seyahat başlat</div>
+            </div>
+          </button>
+          <button onClick={onJoinGroup} className="card tap" style={{ padding: 14, textAlign: 'left', border: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 38, height: 38, borderRadius: 11, background: 'rgba(63,107,107,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Users color="var(--teal)" size={20} strokeWidth={2.2} />
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 600, fontSize: 15 }}>Gruba Katıl</div>
+              <div style={{ color: 'var(--ink-faint)', fontSize: 12.5, marginTop: 1 }}>Kodu gir</div>
+            </div>
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
+          <span className="label" style={{ marginBottom: 0 }}>Gruplarım</span>
+          <span style={{ color: 'var(--ink-faint)', fontSize: 12 }}>{myGroups.length}</span>
+        </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 32, marginTop: 8 }}>
-        <button onClick={onNewGroup} className="card tap" style={{ padding: 14, textAlign: 'left', border: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 38, height: 38, borderRadius: 11, background: 'rgba(193,96,47,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <Plus color="var(--terracotta)" size={20} strokeWidth={2.4} />
+      {/* Kayan grup satırları */}
+      <div style={{ paddingTop: 12 }}>
+        {loadingGroups ? (
+          <div className="card-flat" style={{ padding: 36, textAlign: 'center', borderStyle: 'dashed', color: 'var(--ink-faint)' }}>
+            <Loader2 className="spin" size={22} style={{ margin: '0 auto' }} />
           </div>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontWeight: 600, fontSize: 15 }}>Yeni Grup</div>
-            <div style={{ color: 'var(--ink-faint)', fontSize: 12.5, marginTop: 1 }}>Seyahat başlat</div>
+        ) : myGroups.length === 0 ? (
+          <div className="card-flat" style={{ padding: 36, textAlign: 'center', borderStyle: 'dashed' }}>
+            <div style={{ color: 'var(--ink-soft)', fontSize: 14 }}>Henüz bir grup yok.</div>
+            <div style={{ color: 'var(--ink-faint)', fontSize: 12.5, marginTop: 4 }}>Yukarıdan birini oluştur ya da katıl.</div>
           </div>
-        </button>
-        <button onClick={onJoinGroup} className="card tap" style={{ padding: 14, textAlign: 'left', border: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 38, height: 38, borderRadius: 11, background: 'rgba(63,107,107,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <Users color="var(--teal)" size={20} strokeWidth={2.2} />
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {myGroups.map((g) => (
+              <button key={g.id} onClick={() => onOpenGroup(g.id)} className="card tap"
+                style={{ padding: 16, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 14 }}>
+                <Avatar name={g.ad} id={g.id} size={44} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="serif" style={{ fontWeight: 600, fontSize: 17, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.ad}</div>
+                  {dateRangeLabel(g) && (
+                    <div style={{ color: 'var(--ink-faint)', fontSize: 12, marginTop: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <Calendar size={11} /> {dateRangeLabel(g)}
+                    </div>
+                  )}
+                  <div style={{ color: 'var(--ink-faint)', fontSize: 12, marginTop: 2, fontFamily: 'monospace', letterSpacing: '0.1em' }}>{g.kod}</div>
+                </div>
+                <ChevronLeft color="var(--ink-faint)" size={20} style={{ transform: 'rotate(180deg)' }} />
+              </button>
+            ))}
           </div>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontWeight: 600, fontSize: 15 }}>Gruba Katıl</div>
-            <div style={{ color: 'var(--ink-faint)', fontSize: 12.5, marginTop: 1 }}>Kodu gir</div>
-          </div>
-        </button>
+        )}
       </div>
-
-      <div style={{ marginBottom: 12, display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-        <span className="label" style={{ marginBottom: 0 }}>Gruplarım</span>
-        <span style={{ color: 'var(--ink-faint)', fontSize: 12 }}>{myGroups.length}</span>
-      </div>
-
-      {loadingGroups ? (
-        <div className="card-flat" style={{ padding: 36, textAlign: 'center', borderStyle: 'dashed', color: 'var(--ink-faint)' }}>
-          <Loader2 className="spin" size={22} style={{ margin: '0 auto' }} />
-        </div>
-      ) : myGroups.length === 0 ? (
-        <div className="card-flat" style={{ padding: 36, textAlign: 'center', borderStyle: 'dashed' }}>
-          <div style={{ color: 'var(--ink-soft)', fontSize: 14 }}>Henüz bir grup yok.</div>
-          <div style={{ color: 'var(--ink-faint)', fontSize: 12.5, marginTop: 4 }}>Yukarıdan birini oluştur ya da katıl.</div>
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {myGroups.map((g, i) => (
-            <button key={g.id} onClick={() => onOpenGroup(g.id)} className="card tap rise"
-              style={{ padding: 16, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 14, animationDelay: `${i * 60}ms` }}>
-              <Avatar name={g.ad} id={g.id} size={44} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div className="serif" style={{ fontWeight: 600, fontSize: 17 }}>{g.ad}</div>
-                <div style={{ color: 'var(--ink-faint)', fontSize: 12, marginTop: 1, fontFamily: 'monospace', letterSpacing: '0.1em' }}>{g.kod}</div>
-              </div>
-              <ChevronLeft color="var(--ink-faint)" size={20} style={{ transform: 'rotate(180deg)' }} />
-            </button>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
