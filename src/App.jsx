@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Plus, Users, Receipt, ArrowRightLeft, Trash2, Check, X, Plane, Coins, ChevronLeft, Copy, Loader2, Share2,
   UtensilsCrossed, Car, BedDouble, Ticket, ShoppingBag, Plane as PlaneIcon, Wine, MoreHorizontal, TrendingUp,
-  LogOut, User, Lock, AtSign, ArrowRight, Eye, EyeOff, Pencil, Image as ImageIcon, Camera, Calendar } from 'lucide-react';
+  LogOut, User, Lock, AtSign, ArrowRight, Eye, EyeOff, Pencil, Image as ImageIcon, Camera, Calendar, MapPin, Search } from 'lucide-react';
 import { supabase } from './supabase';
 
 // Yalnızca bu kullanıcı adları yeni grup oluşturabilir (diğerleri sadece gruba katılır).
@@ -608,6 +608,7 @@ function GroupView({ groupId, session, onBack, onLeave, onDeleted }) {
 function ExpensesTab({ group, members, expenses, katilanlar = [], reload, onEdit, isOwner }) {
   const baseSym = CURRENCY_SYMBOLS[group.ana_para_birimi] || group.ana_para_birimi;
   const [viewImg, setViewImg] = useState(null);
+  const [viewLoc, setViewLoc] = useState(null);
   const adderName = (id) => katilanlar.find(k => k.kullanici_id === id)?.kullanicilar?.kullanici_adi;
   const deleteExpense = async (id) => {
     if (!confirm('Bu harcamayı silmek istediğinden emin misin?')) return;
@@ -656,6 +657,12 @@ function ExpensesTab({ group, members, expenses, katilanlar = [], reload, onEdit
                   <div style={{ color: 'var(--ink-faint)', fontSize: 11.5 }}>≈ {baseSym}{formatNum(baseAmt)}</div>
                 )}
               </div>
+              {e.enlem != null && e.boylam != null && (
+                <button onClick={() => setViewLoc(e)} className="tap" title="Konumu göster"
+                  style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, marginLeft: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--olive)', background: 'rgba(111,122,79,0.12)', border: 'none' }}>
+                  <MapPin size={15} />
+                </button>
+              )}
               {e.foto_url && (
                 <button onClick={() => setViewImg(e.foto_url)} className="tap" title="Fişi göster"
                   style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, marginLeft: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--teal)', background: 'rgba(63,107,107,0.1)', border: 'none' }}>
@@ -690,7 +697,135 @@ function ExpensesTab({ group, members, expenses, katilanlar = [], reload, onEdit
           style={{ maxWidth: '100%', maxHeight: '88vh', borderRadius: 14, objectFit: 'contain', boxShadow: 'var(--shadow-lg)' }} />
       </div>
     )}
+
+    {viewLoc && (
+      <div className="fade" onClick={() => setViewLoc(null)}
+        style={{ position: 'fixed', inset: 0, zIndex: 40, background: 'rgba(43,38,32,0.5)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+        <div className="sheet-up" onClick={ev => ev.stopPropagation()} style={{ width: '100%', maxWidth: 600, borderTopLeftRadius: 26, borderTopRightRadius: 26, background: 'var(--paper)', borderTop: '1px solid var(--line)', padding: '14px 18px calc(env(safe-area-inset-bottom) + 20px)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <h3 className="serif" style={{ fontWeight: 600, fontSize: 17, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{viewLoc.konum_adi || viewLoc.baslik}</h3>
+            <button onClick={() => setViewLoc(null)} className="tap" style={{ flexShrink: 0, color: 'var(--ink-soft)', background: 'var(--card)', border: '1px solid var(--line)', borderRadius: 999, width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={19} /></button>
+          </div>
+          <LeafletMap lat={viewLoc.enlem} lng={viewLoc.boylam} height={260} />
+          <a href={`https://www.google.com/maps?q=${viewLoc.enlem},${viewLoc.boylam}`} target="_blank" rel="noopener noreferrer" className="tap"
+            style={{ marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 12, padding: 12, background: 'var(--ink)', color: '#fff', fontWeight: 600, fontSize: 14, textDecoration: 'none' }}>
+            <MapPin size={15} /> Google Haritalar'da aç
+          </a>
+        </div>
+      </div>
+    )}
     </>
+  );
+}
+
+// Salt-okunur küçük harita (önizleme / görüntüleme)
+function LeafletMap({ lat, lng, height = 180 }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const L = window.L;
+    if (!L || !ref.current || lat == null || lng == null) return;
+    const map = L.map(ref.current, { zoomControl: false, attributionControl: false, dragging: false, scrollWheelZoom: false, doubleClickZoom: false, touchZoom: false, boxZoom: false, keyboard: false }).setView([lat, lng], 15);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+    L.marker([lat, lng]).addTo(map);
+    const t = setTimeout(() => map.invalidateSize(), 150);
+    return () => { clearTimeout(t); map.remove(); };
+  }, [lat, lng]);
+  return <div ref={ref} style={{ height, width: '100%', borderRadius: 12, overflow: 'hidden', border: '1px solid var(--line)' }} />;
+}
+
+// Etkileşimli konum seçici (dokun-pin + arama + konumum)
+function LocationPicker({ initial, onClose, onConfirm }) {
+  const ref = useRef(null);
+  const mapRef = useRef(null);
+  const markerRef = useRef(null);
+  const [sel, setSel] = useState(initial && initial.lat != null ? { lat: initial.lat, lng: initial.lng, ad: initial.ad || '' } : null);
+  const [q, setQ] = useState('');
+  const [searching, setSearching] = useState(false);
+
+  const place = (lat, lng, ad) => {
+    const L = window.L;
+    if (markerRef.current) markerRef.current.setLatLng([lat, lng]);
+    else if (mapRef.current) markerRef.current = L.marker([lat, lng]).addTo(mapRef.current);
+    setSel({ lat, lng, ad: ad != null ? ad : '' });
+  };
+
+  useEffect(() => {
+    const L = window.L;
+    if (!L || !ref.current || mapRef.current) return;
+    const start = sel ? [sel.lat, sel.lng] : [41.0082, 28.9784];
+    const map = L.map(ref.current).setView(start, sel ? 15 : 6);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
+    if (sel) markerRef.current = L.marker([sel.lat, sel.lng]).addTo(map);
+    map.on('click', (e) => place(e.latlng.lat, e.latlng.lng));
+    mapRef.current = map;
+    const t = setTimeout(() => map.invalidateSize(), 250);
+    return () => { clearTimeout(t); map.remove(); mapRef.current = null; markerRef.current = null; };
+  }, []);
+
+  const search = async () => {
+    if (!q.trim() || searching) return;
+    setSearching(true);
+    try {
+      const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q.trim())}`, { headers: { 'Accept-Language': 'tr' } });
+      const arr = await r.json();
+      if (arr && arr[0]) {
+        const lat = parseFloat(arr[0].lat), lng = parseFloat(arr[0].lon);
+        mapRef.current?.setView([lat, lng], 15);
+        place(lat, lng, (arr[0].display_name || q.trim()).split(',')[0]);
+      }
+    } catch {}
+    setSearching(false);
+  };
+
+  const useCurrent = () => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition((pos) => {
+      const lat = pos.coords.latitude, lng = pos.coords.longitude;
+      mapRef.current?.setView([lat, lng], 16);
+      place(lat, lng);
+    });
+  };
+
+  const noLeaflet = typeof window !== 'undefined' && !window.L;
+
+  return (
+    <div className="fade" style={{ position: 'fixed', inset: 0, zIndex: 45, background: 'rgba(43,38,32,0.4)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }} onClick={onClose}>
+      <div className="sheet-up" onClick={ev => ev.stopPropagation()} style={{ width: '100%', maxWidth: 600, borderTopLeftRadius: 26, borderTopRightRadius: 26, maxHeight: '92vh', overflowY: 'auto', background: 'var(--paper)', borderTop: '1px solid var(--line)' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 10 }}>
+          <div style={{ width: 40, height: 5, borderRadius: 999, background: 'var(--line)' }} />
+        </div>
+        <div style={{ position: 'sticky', top: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px 14px', background: 'var(--paper)', zIndex: 2 }}>
+          <h3 className="serif" style={{ fontWeight: 600, fontSize: 20 }}>Konum Seç</h3>
+          <button onClick={onClose} className="tap" style={{ color: 'var(--ink-soft)', background: 'var(--card)', border: '1px solid var(--line)', borderRadius: 999, width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={19} /></button>
+        </div>
+        <div style={{ padding: '0 20px 28px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {noLeaflet ? (
+            <p style={{ color: 'var(--berry)', fontSize: 13 }}>Harita yüklenemedi (internet bağlantısını kontrol et).</p>
+          ) : (
+            <>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ position: 'relative', flex: 1 }}>
+                  <Search size={16} color="var(--ink-faint)" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+                  <input value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') search(); }} placeholder="Yer ara (örn. Eiffel Tower)" className="input" style={{ paddingLeft: 36 }} />
+                </div>
+                <button onClick={search} disabled={searching} className="tap" style={{ borderRadius: 12, padding: '0 16px', background: 'var(--ink)', color: '#fff', fontWeight: 600, border: 'none', display: 'flex', alignItems: 'center' }}>
+                  {searching ? <Loader2 size={16} className="spin" /> : 'Ara'}
+                </button>
+              </div>
+              <button onClick={useCurrent} className="tap" style={{ borderRadius: 12, padding: 11, border: '1.5px solid var(--line)', background: '#fff', color: 'var(--ink-soft)', fontWeight: 500, fontSize: 13.5, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                <MapPin size={15} /> Konumumu kullan
+              </button>
+              <div ref={ref} style={{ height: '46vh', minHeight: 260, width: '100%', borderRadius: 14, overflow: 'hidden', border: '1px solid var(--line)' }} />
+              <p style={{ color: 'var(--ink-faint)', fontSize: 12, textAlign: 'center' }}>Haritada bir yere dokunarak işaretle.</p>
+              {sel && <div style={{ fontSize: 13, color: 'var(--ink-soft)', textAlign: 'center' }}>📍 {sel.ad || `${sel.lat.toFixed(5)}, ${sel.lng.toFixed(5)}`}</div>}
+              <button onClick={() => sel && onConfirm(sel)} disabled={!sel} className="btn-primary tap" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                Bu Konumu Kullan
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -713,6 +848,10 @@ function NewExpenseModal({ group, members, session, expense, onClose, onSaved })
   const [fotoFile, setFotoFile] = useState(null);
   const [localPreview, setLocalPreview] = useState(null);
   const [uploadErr, setUploadErr] = useState('');
+  const [enlem, setEnlem] = useState(expense?.enlem ?? null);
+  const [boylam, setBoylam] = useState(expense?.boylam ?? null);
+  const [konumAdi, setKonumAdi] = useState(expense?.konum_adi || '');
+  const [showMap, setShowMap] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const onPickFoto = (file) => { if (!file) return; setUploadErr(''); setFotoFile(file); setLocalPreview(URL.createObjectURL(file)); };
@@ -751,6 +890,7 @@ function NewExpenseModal({ group, members, session, expense, onClose, onSaved })
     const payload = {
       grup_id: group.id, baslik: baslik.trim(), tutar: total, para_birimi: paraBirimi,
       kategori, odeyen_id: payers[0].id, odeyenler, bolusenler, not_metni: notMetni.trim(), foto_url: finalFoto || null,
+      enlem, boylam, konum_adi: konumAdi || null,
     };
     if (editing) await supabase.from('harcamalar').update(payload).eq('id', expense.id);
     else await supabase.from('harcamalar').insert({ ...payload, ekleyen_id: session?.id || null });
@@ -903,6 +1043,25 @@ function NewExpenseModal({ group, members, session, expense, onClose, onSaved })
             {uploadErr && <p style={{ color: 'var(--berry)', fontSize: 13, marginTop: 8 }}>{uploadErr}</p>}
           </div>
 
+          <div>
+            <label className="label">Konum (opsiyonel)</label>
+            {enlem != null && boylam != null ? (
+              <div style={{ position: 'relative' }}>
+                <LeafletMap lat={enlem} lng={boylam} height={150} />
+                <button onClick={() => { setEnlem(null); setBoylam(null); setKonumAdi(''); }} type="button" className="tap" style={{ position: 'absolute', top: 8, right: 8, width: 32, height: 32, borderRadius: 999, background: 'rgba(43,38,32,0.6)', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500 }}>
+                  <X size={17} />
+                </button>
+                <button onClick={() => setShowMap(true)} type="button" className="tap" style={{ marginTop: 8, width: '100%', borderRadius: 12, border: '1.5px solid var(--line)', background: '#fff', color: 'var(--ink-soft)', padding: 11, fontWeight: 500, fontSize: 13.5, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                  <MapPin size={15} /> {konumAdi ? konumAdi : 'Konumu değiştir'}
+                </button>
+              </div>
+            ) : (
+              <button onClick={() => setShowMap(true)} type="button" className="tap" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 12, border: '1.5px dashed var(--line)', padding: 16, color: 'var(--ink-soft)', fontSize: 14, fontWeight: 500, cursor: 'pointer', background: 'transparent', width: '100%' }}>
+                <MapPin size={18} /> Haritadan konum seç
+              </button>
+            )}
+          </div>
+
           <button onClick={save} disabled={!canSave || saving} className="btn-primary tap"
             style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
             {saving && <Loader2 size={18} className="spin" />}
@@ -910,6 +1069,11 @@ function NewExpenseModal({ group, members, session, expense, onClose, onSaved })
           </button>
         </div>
       </div>
+
+      {showMap && <LocationPicker
+        initial={enlem != null ? { lat: enlem, lng: boylam, ad: konumAdi } : null}
+        onClose={() => setShowMap(false)}
+        onConfirm={(loc) => { setEnlem(loc.lat); setBoylam(loc.lng); setKonumAdi(loc.ad || ''); setShowMap(false); }} />}
     </div>
   );
 }
