@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Plus, Users, Receipt, ArrowRightLeft, Trash2, Check, X, Plane, Coins, ChevronLeft, Copy, Loader2, Share2,
   UtensilsCrossed, Car, BedDouble, Ticket, ShoppingBag, Plane as PlaneIcon, Wine, MoreHorizontal, TrendingUp,
-  LogOut, User, Lock, AtSign, ArrowRight, Eye, EyeOff, Pencil } from 'lucide-react';
+  LogOut, User, Lock, AtSign, ArrowRight, Eye, EyeOff, Pencil, Image as ImageIcon, Camera } from 'lucide-react';
 import { supabase } from './supabase';
 
 const CURRENCY_SYMBOLS = { TRY: '₺', EUR: '€', USD: '$', GBP: '£', JPY: '¥', CHF: 'Fr', AED: 'د.إ' };
@@ -119,13 +119,13 @@ export default function App() {
         {view === 'home' && <HomeView session={session} myGroups={myGroups} loadingGroups={loadingGroups}
           onOpenGroup={(id) => { setActiveGroupId(id); setView('group'); }}
           onNewGroup={() => setView('newGroup')} onJoinGroup={() => setView('joinGroup')} onLogout={logout} />}
-        {view === 'newGroup' && <NewGroupView
+        {view === 'newGroup' && <NewGroupView session={session}
           onCreated={(g) => { addToMyGroups(g); setActiveGroupId(g.id); setView('group'); }}
           onBack={() => setView('home')} />}
         {view === 'joinGroup' && <JoinGroupView
           onJoined={(g) => { addToMyGroups(g); setActiveGroupId(g.id); setView('group'); }}
           onBack={() => setView('home')} />}
-        {view === 'group' && <GroupView groupId={activeGroupId}
+        {view === 'group' && <GroupView groupId={activeGroupId} session={session}
           onBack={() => setView('home')}
           onLeave={() => { removeFromMyGroups(activeGroupId); setView('home'); }}
           onDeleted={() => { setView('home'); loadGroups(session.id); }} />}
@@ -323,7 +323,7 @@ function HomeView({ session, myGroups, loadingGroups, onOpenGroup, onNewGroup, o
   );
 }
 
-function NewGroupView({ onCreated, onBack }) {
+function NewGroupView({ session, onCreated, onBack }) {
   const [ad, setAd] = useState('');
   const [members, setMembers] = useState(['']);
   const [baseCurrency, setBaseCurrency] = useState('TRY');
@@ -341,7 +341,7 @@ function NewGroupView({ onCreated, onBack }) {
     try {
       const kod = groupCode();
       const { data: grup, error: e1 } = await supabase.from('gruplar')
-        .insert({ kod, ad: ad.trim(), ana_para_birimi: baseCurrency, kurlar: DEFAULT_RATES }).select().single();
+        .insert({ kod, ad: ad.trim(), ana_para_birimi: baseCurrency, kurlar: DEFAULT_RATES, olusturan_id: session?.id || null }).select().single();
       if (e1) throw e1;
       const uyeRows = members.filter(m => m.trim()).map(m => ({ grup_id: grup.id, ad: m.trim() }));
       const { error: e2 } = await supabase.from('uyeler').insert(uyeRows);
@@ -444,7 +444,7 @@ function JoinGroupView({ onJoined, onBack }) {
   );
 }
 
-function GroupView({ groupId, onBack, onLeave, onDeleted }) {
+function GroupView({ groupId, session, onBack, onLeave, onDeleted }) {
   const [group, setGroup] = useState(null);
   const [members, setMembers] = useState([]);
   const [expenses, setExpenses] = useState([]);
@@ -477,6 +477,12 @@ function GroupView({ groupId, onBack, onLeave, onDeleted }) {
   if (loading) return <div style={{ textAlign: 'center', color: 'var(--ink-faint)', marginTop: 120 }}><Loader2 className="spin" /></div>;
   if (!group) return <div style={{ textAlign: 'center', color: 'var(--ink-faint)', marginTop: 120 }}>Grup bulunamadı.</div>;
 
+  // Kurucu yoksa (eski gruplar) herkes yönetebilir; aksi halde yalnızca kurucu.
+  const isOwner = !group.olusturan_id || session?.id === group.olusturan_id;
+  const activeTab = (tab === 'settings' && !isOwner) ? 'expenses' : tab;
+  const tabs = [{ k: 'expenses', l: 'Harcamalar', I: Receipt }, { k: 'balances', l: 'Hesaplaşma', I: ArrowRightLeft }];
+  if (isOwner) tabs.push({ k: 'settings', l: 'Ayarlar', I: Coins });
+
   return (
     <>
     <div className="rise">
@@ -497,25 +503,25 @@ function GroupView({ groupId, onBack, onLeave, onDeleted }) {
       </div>
 
       <div style={{ display: 'flex', gap: 4, background: 'var(--paper-2)', borderRadius: 13, padding: 4, marginBottom: 20 }}>
-        {[{ k: 'expenses', l: 'Harcamalar', I: Receipt }, { k: 'balances', l: 'Hesaplaşma', I: ArrowRightLeft }, { k: 'settings', l: 'Ayarlar', I: Coins }].map(t => (
+        {tabs.map(t => (
           <button key={t.k} onClick={() => setTab(t.k)} className="tap"
             style={{ flex: 1, borderRadius: 10, padding: '10px 0', fontSize: 13, fontWeight: 600, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-              ...(tab === t.k ? { background: 'var(--card)', color: 'var(--ink)', boxShadow: 'var(--shadow-sm)' } : { background: 'transparent', color: 'var(--ink-soft)' }) }}>
+              ...(activeTab === t.k ? { background: 'var(--card)', color: 'var(--ink)', boxShadow: 'var(--shadow-sm)' } : { background: 'transparent', color: 'var(--ink-soft)' }) }}>
             <t.I size={15} /> {t.l}
           </button>
         ))}
       </div>
 
-      {tab === 'expenses' && <ExpensesTab group={group} members={members} expenses={expenses} reload={reload} onEdit={(e) => setEditExpense(e)} />}
-      {tab === 'balances' && <BalancesTab group={group} members={members} expenses={expenses} transfers={transfers} reload={reload} />}
-      {tab === 'settings' && <SettingsTab group={group} members={members} expenses={expenses} transfers={transfers} reload={reload} onLeave={onLeave} onDeleted={onDeleted} />}
+      {activeTab === 'expenses' && <ExpensesTab group={group} members={members} expenses={expenses} reload={reload} isOwner={isOwner} onEdit={(e) => setEditExpense(e)} />}
+      {activeTab === 'balances' && <BalancesTab group={group} members={members} expenses={expenses} transfers={transfers} reload={reload} isOwner={isOwner} />}
+      {activeTab === 'settings' && isOwner && <SettingsTab group={group} members={members} expenses={expenses} transfers={transfers} reload={reload} onLeave={onLeave} onDeleted={onDeleted} />}
     </div>
 
     {(showNewExpense || editExpense) && <NewExpenseModal group={group} members={members} expense={editExpense}
       onClose={() => { setShowNewExpense(false); setEditExpense(null); }}
       onSaved={() => { setShowNewExpense(false); setEditExpense(null); reload(); }} />}
 
-    {tab === 'expenses' && !showNewExpense && !editExpense && (
+    {isOwner && activeTab === 'expenses' && !showNewExpense && !editExpense && (
       <button onClick={() => setShowNewExpense(true)} className="tap"
         style={{ position: 'fixed', bottom: 26, right: 26, width: 58, height: 58, borderRadius: 999, border: 'none', boxShadow: '0 8px 28px rgba(193,96,47,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 20, background: 'linear-gradient(135deg, var(--terracotta), var(--terracotta-dark))' }}>
         <Plus color="#fff" size={28} strokeWidth={2.5} />
@@ -525,8 +531,9 @@ function GroupView({ groupId, onBack, onLeave, onDeleted }) {
   );
 }
 
-function ExpensesTab({ group, members, expenses, reload, onEdit }) {
+function ExpensesTab({ group, members, expenses, reload, onEdit, isOwner }) {
   const baseSym = CURRENCY_SYMBOLS[group.ana_para_birimi] || group.ana_para_birimi;
+  const [viewImg, setViewImg] = useState(null);
   const deleteExpense = async (id) => {
     if (!confirm('Bu harcamayı silmek istediğinden emin misin?')) return;
     await supabase.from('harcamalar').delete().eq('id', id); reload();
@@ -543,6 +550,7 @@ function ExpensesTab({ group, members, expenses, reload, onEdit }) {
   }
 
   return (
+    <>
     <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
       {expenses.map((e, i) => {
         const payers = payersOf(e);
@@ -568,20 +576,43 @@ function ExpensesTab({ group, members, expenses, reload, onEdit }) {
                   <div style={{ color: 'var(--ink-faint)', fontSize: 11.5 }}>≈ {baseSym}{formatNum(baseAmt)}</div>
                 )}
               </div>
-              <button onClick={() => onEdit(e)} className="tap" title="Düzenle"
-                style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, marginLeft: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--terracotta)', background: 'rgba(193,96,47,0.1)', border: 'none' }}>
-                <Pencil size={15} />
-              </button>
-              <button onClick={() => deleteExpense(e.id)} className="tap" title="Sil"
-                style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, marginLeft: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--berry)', background: 'rgba(158,75,84,0.1)', border: 'none' }}>
-                <Trash2 size={15} />
-              </button>
+              {e.foto_url && (
+                <button onClick={() => setViewImg(e.foto_url)} className="tap" title="Fişi göster"
+                  style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, marginLeft: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--teal)', background: 'rgba(63,107,107,0.1)', border: 'none' }}>
+                  <ImageIcon size={15} />
+                </button>
+              )}
+              {isOwner && (
+                <button onClick={() => onEdit(e)} className="tap" title="Düzenle"
+                  style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, marginLeft: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--terracotta)', background: 'rgba(193,96,47,0.1)', border: 'none' }}>
+                  <Pencil size={15} />
+                </button>
+              )}
+              {isOwner && (
+                <button onClick={() => deleteExpense(e.id)} className="tap" title="Sil"
+                  style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, marginLeft: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--berry)', background: 'rgba(158,75,84,0.1)', border: 'none' }}>
+                  <Trash2 size={15} />
+                </button>
+              )}
             </div>
             {e.not_metni && <div style={{ color: 'var(--ink-faint)', fontSize: 12.5, marginTop: 8, paddingLeft: 55, fontStyle: 'italic' }}>"{e.not_metni}"</div>}
           </div>
         );
       })}
     </div>
+
+    {viewImg && (
+      <div className="fade" onClick={() => setViewImg(null)}
+        style={{ position: 'fixed', inset: 0, zIndex: 40, background: 'rgba(43,38,32,0.85)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <button onClick={() => setViewImg(null)} className="tap"
+          style={{ position: 'absolute', top: 18, right: 18, width: 38, height: 38, borderRadius: 999, background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <X size={20} />
+        </button>
+        <img src={viewImg} alt="Fiş" onClick={ev => ev.stopPropagation()}
+          style={{ maxWidth: '100%', maxHeight: '88vh', borderRadius: 14, objectFit: 'contain', boxShadow: 'var(--shadow-lg)' }} />
+      </div>
+    )}
+    </>
   );
 }
 
@@ -600,7 +631,14 @@ function NewExpenseModal({ group, members, expense, onClose, onSaved }) {
   );
   const [bolusenler, setBolusenler] = useState(expense?.bolusenler || members.map(m => m.id));
   const [notMetni, setNotMetni] = useState(expense?.not_metni || '');
+  const [fotoUrl, setFotoUrl] = useState(expense?.foto_url || null);
+  const [fotoFile, setFotoFile] = useState(null);
+  const [localPreview, setLocalPreview] = useState(null);
+  const [uploadErr, setUploadErr] = useState('');
   const [saving, setSaving] = useState(false);
+
+  const onPickFoto = (file) => { if (!file) return; setUploadErr(''); setFotoFile(file); setLocalPreview(URL.createObjectURL(file)); };
+  const removeFoto = () => { setFotoFile(null); setLocalPreview(null); setFotoUrl(null); };
 
   const isMulti = payers.length > 1;
   const payersSum = payers.reduce((s, p) => s + (parseFloat(p.tutar) || 0), 0);
@@ -620,10 +658,20 @@ function NewExpenseModal({ group, members, expense, onClose, onSaved }) {
   const save = async () => {
     if (!canSave || saving) return;
     setSaving(true);
+    let finalFoto = fotoUrl;
+    if (fotoFile) {
+      try {
+        const ext = (fotoFile.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+        const path = `${group.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+        const { error: upErr } = await supabase.storage.from('fisler').upload(path, fotoFile, { cacheControl: '3600', upsert: false });
+        if (upErr) throw upErr;
+        finalFoto = supabase.storage.from('fisler').getPublicUrl(path).data.publicUrl;
+      } catch (err) { setUploadErr('Fotoğraf yüklenemedi: ' + (err.message || 'bilinmeyen')); setSaving(false); return; }
+    }
     const odeyenler = payers.map(p => ({ id: p.id, tutar: isMulti ? parseFloat(p.tutar) : total }));
     const payload = {
       grup_id: group.id, baslik: baslik.trim(), tutar: total, para_birimi: paraBirimi,
-      kategori, odeyen_id: payers[0].id, odeyenler, bolusenler, not_metni: notMetni.trim(),
+      kategori, odeyen_id: payers[0].id, odeyenler, bolusenler, not_metni: notMetni.trim(), foto_url: finalFoto || null,
     };
     if (editing) await supabase.from('harcamalar').update(payload).eq('id', expense.id);
     else await supabase.from('harcamalar').insert(payload);
@@ -758,6 +806,24 @@ function NewExpenseModal({ group, members, expense, onClose, onSaved }) {
             <input value={notMetni} onChange={e => setNotMetni(e.target.value)} placeholder="Kısa açıklama..." className="input" />
           </div>
 
+          <div>
+            <label className="label">Fiş / Fotoğraf (opsiyonel)</label>
+            {(localPreview || fotoUrl) ? (
+              <div style={{ position: 'relative', borderRadius: 14, overflow: 'hidden', border: '1px solid var(--line)' }}>
+                <img src={localPreview || fotoUrl} alt="Fiş" style={{ width: '100%', maxHeight: 240, objectFit: 'cover', display: 'block' }} />
+                <button onClick={removeFoto} type="button" className="tap" style={{ position: 'absolute', top: 8, right: 8, width: 32, height: 32, borderRadius: 999, background: 'rgba(43,38,32,0.6)', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <X size={17} />
+                </button>
+              </div>
+            ) : (
+              <label className="tap" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 12, border: '1.5px dashed var(--line)', padding: 16, color: 'var(--ink-soft)', fontSize: 14, fontWeight: 500, cursor: 'pointer', background: 'transparent' }}>
+                <Camera size={18} /> Fotoğraf çek / seç
+                <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => onPickFoto(e.target.files?.[0])} />
+              </label>
+            )}
+            {uploadErr && <p style={{ color: 'var(--berry)', fontSize: 13, marginTop: 8 }}>{uploadErr}</p>}
+          </div>
+
           <button onClick={save} disabled={!canSave || saving} className="btn-primary tap"
             style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
             {saving && <Loader2 size={18} className="spin" />}
@@ -769,7 +835,7 @@ function NewExpenseModal({ group, members, expense, onClose, onSaved }) {
   );
 }
 
-function BalancesTab({ group, members, expenses, transfers, reload }) {
+function BalancesTab({ group, members, expenses, transfers, reload, isOwner }) {
   const baseSym = CURRENCY_SYMBOLS[group.ana_para_birimi] || group.ana_para_birimi;
   const [showTransfer, setShowTransfer] = useState(false);
   const [prefill, setPrefill] = useState(null);
@@ -880,8 +946,8 @@ function BalancesTab({ group, members, expenses, transfers, reload }) {
           <>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {settlements.map((s, i) => (
-                <button key={i} onClick={() => openSettle(s)} className="card rise tap" title="Ödendiyse dokun, nakit ödeme olarak kaydet"
-                  style={{ padding: 13, display: 'flex', alignItems: 'center', gap: 10, animationDelay: `${i * 50}ms`, textAlign: 'left', width: '100%', cursor: 'pointer' }}>
+                <button key={i} onClick={() => isOwner && openSettle(s)} disabled={!isOwner} className={isOwner ? 'card rise tap' : 'card rise'} title={isOwner ? 'Ödendiyse dokun, nakit ödeme olarak kaydet' : undefined}
+                  style={{ padding: 13, display: 'flex', alignItems: 'center', gap: 10, animationDelay: `${i * 50}ms`, textAlign: 'left', width: '100%', cursor: isOwner ? 'pointer' : 'default' }}>
                   <Avatar name={name(s.from)} id={s.from} size={34} />
                   <span style={{ fontWeight: 600, fontSize: 14 }}>{name(s.from)}</span>
                   <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, color: 'var(--ink-faint)' }}>
@@ -895,7 +961,7 @@ function BalancesTab({ group, members, expenses, transfers, reload }) {
                 </button>
               ))}
             </div>
-            <p style={{ color: 'var(--ink-faint)', fontSize: 12, marginTop: 8, textAlign: 'center' }}>Bir ödeme gerçekleştiyse karta dokun, nakit ödeme olarak kaydet.</p>
+            {isOwner && <p style={{ color: 'var(--ink-faint)', fontSize: 12, marginTop: 8, textAlign: 'center' }}>Bir ödeme gerçekleştiyse karta dokun, nakit ödeme olarak kaydet.</p>}
           </>
         )}
       </div>
@@ -903,10 +969,10 @@ function BalancesTab({ group, members, expenses, transfers, reload }) {
       <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h3 className="label" style={{ marginBottom: 0 }}>Nakit Ödemeler</h3>
-          <button onClick={() => { setPrefill(null); setShowTransfer(true); }} className="tap"
+          {isOwner && <button onClick={() => { setPrefill(null); setShowTransfer(true); }} className="tap"
             style={{ color: 'var(--terracotta)', fontSize: 12.5, fontWeight: 600, background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
             <Plus size={14} /> Ödeme ekle
-          </button>
+          </button>}
         </div>
         {(!transfers || transfers.length === 0) ? (
           <p style={{ color: 'var(--ink-faint)', fontSize: 12.5, marginTop: 8 }}>Elden verilen nakitleri buraya ekle; bakiyeler buna göre güncellenir.</p>
@@ -922,7 +988,7 @@ function BalancesTab({ group, members, expenses, transfers, reload }) {
                   {t.not_metni && <div style={{ color: 'var(--ink-faint)', fontSize: 11.5, fontStyle: 'italic' }}>"{t.not_metni}"</div>}
                 </div>
                 <span className="serif" style={{ fontWeight: 600, fontSize: 14, color: 'var(--olive)' }}>{CURRENCY_SYMBOLS[t.para_birimi]}{formatNum(t.tutar)}</span>
-                <button onClick={() => deleteTransfer(t.id)} className="tap" style={{ color: 'var(--ink-faint)', background: 'none', border: 'none', padding: 4 }}><Trash2 size={14} /></button>
+                {isOwner && <button onClick={() => deleteTransfer(t.id)} className="tap" style={{ color: 'var(--ink-faint)', background: 'none', border: 'none', padding: 4 }}><Trash2 size={14} /></button>}
               </div>
             ))}
           </div>
