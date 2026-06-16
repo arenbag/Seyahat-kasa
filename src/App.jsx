@@ -1216,6 +1216,11 @@ function SettingsTab({ group, members, expenses, transfers, katilanlar = [], rel
     if (!confirm('Bu kişiyi gruptan çıkar?')) return;
     await supabase.from('uyeler').delete().eq('id', id); reload();
   };
+  const kickUser = async (kullaniciId, ad) => {
+    if (!confirm(`@${ad} kullanıcısını gruptan çıkar? Grup onun listesinden kalkar (kodla tekrar katılabilir).`)) return;
+    await supabase.from('kullanici_gruplari').delete().eq('grup_id', group.id).eq('kullanici_id', kullaniciId);
+    reload();
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -1259,7 +1264,11 @@ function SettingsTab({ group, members, expenses, transfers, katilanlar = [], rel
                 <div key={k.kullanici_id} style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
                   <Avatar name={ad} id={k.kullanici_id} size={34} />
                   <span style={{ flex: 1, fontSize: 14.5 }}>@{ad}</span>
-                  {owner && <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--terracotta)', background: 'rgba(193,96,47,0.1)', padding: '3px 9px', borderRadius: 999 }}>Kurucu</span>}
+                  {owner ? (
+                    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--terracotta)', background: 'rgba(193,96,47,0.1)', padding: '3px 9px', borderRadius: 999 }}>Kurucu</span>
+                  ) : (
+                    <button onClick={() => kickUser(k.kullanici_id, ad)} className="tap" title="Gruptan çıkar" style={{ color: 'var(--berry)', background: 'none', border: 'none', padding: 4 }}><Trash2 size={15} /></button>
+                  )}
                 </div>
               );
             })}
