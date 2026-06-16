@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Plus, Users, Receipt, ArrowRightLeft, Trash2, Check, X, Plane, Coins, ChevronLeft, Copy, Loader2, Share2,
-  UtensilsCrossed, Car, BedDouble, Ticket, ShoppingBag, Plane as PlaneIcon, Wine, MoreHorizontal, TrendingUp } from 'lucide-react';
+  UtensilsCrossed, Car, BedDouble, Ticket, ShoppingBag, Plane as PlaneIcon, Wine, MoreHorizontal, TrendingUp,
+  LogOut, User, Lock, AtSign, ArrowRight, Eye, EyeOff } from 'lucide-react';
 import { supabase } from './supabase';
 
 const CURRENCY_SYMBOLS = { TRY: '₺', EUR: '€', USD: '$', GBP: '£', JPY: '¥', CHF: 'Fr', AED: 'د.إ' };
@@ -34,28 +35,84 @@ const groupCode = () => Math.random().toString(36).slice(2, 8).toUpperCase();
 
 const LS_KEY = 'seyahatkasa_gruplarim';
 const getMyGroups = () => { try { return JSON.parse(localStorage.getItem(LS_KEY)) || []; } catch { return []; } };
-const setMyGroups = (list) => { try { localStorage.setItem(LS_KEY, JSON.stringify(list)); } catch {} };
+const clearMyGroups = () => { try { localStorage.removeItem(LS_KEY); } catch {} };
+
+const SESSION_KEY = 'seyahatkasa_oturum';
+const getSession = () => { try { return JSON.parse(localStorage.getItem(SESSION_KEY)); } catch { return null; } };
+const saveSession = (s) => { try { s ? localStorage.setItem(SESSION_KEY, JSON.stringify(s)) : localStorage.removeItem(SESSION_KEY); } catch {} };
+
+async function hashPassword(pw) {
+  const data = new TextEncoder().encode(pw + '::seyahatkasa.v1');
+  const buf = await crypto.subtle.digest('SHA-256', data);
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
 
 export default function App() {
+  const [session, setSessionState] = useState(getSession());
   const [view, setView] = useState('home');
   const [activeGroupId, setActiveGroupId] = useState(null);
-  const [myGroups, setMyGroupsState] = useState(getMyGroups());
+  const [myGroups, setMyGroupsState] = useState([]);
+  const [loadingGroups, setLoadingGroups] = useState(!!getSession());
 
-  const addToMyGroups = (g) => {
-    const next = myGroups.find(x => x.id === g.id) ? myGroups : [...myGroups, { id: g.id, ad: g.ad, kod: g.kod }];
-    setMyGroupsState(next); setMyGroups(next);
+  const loadGroups = useCallback(async (uid) => {
+    if (!uid) return;
+    const { data } = await supabase.from('kullanici_gruplari')
+      .select('grup_id, olusturma_tarihi, gruplar(id, ad, kod)')
+      .eq('kullanici_id', uid).order('olusturma_tarihi');
+    setMyGroupsState((data || []).map(r => r.gruplar).filter(Boolean));
+    setLoadingGroups(false);
+  }, []);
+
+  // Bu cihazdaki eski localStorage gruplarını bir kez hesaba taşı
+  const migrateLocalGroups = useCallback(async (uid) => {
+    const old = getMyGroups();
+    if (!old.length) return;
+    for (const g of old) {
+      try { await supabase.from('kullanici_gruplari').upsert({ kullanici_id: uid, grup_id: g.id }, { onConflict: 'kullanici_id,grup_id', ignoreDuplicates: true }); } catch {}
+    }
+    clearMyGroups();
+  }, []);
+
+  useEffect(() => {
+    if (!session) { setLoadingGroups(false); return; }
+    (async () => { await migrateLocalGroups(session.id); await loadGroups(session.id); })();
+  }, [session, loadGroups, migrateLocalGroups]);
+
+  const onAuthed = (user) => {
+    const s = { id: user.id, kullanici_adi: user.kullanici_adi };
+    saveSession(s); setSessionState(s); setLoadingGroups(true); setView('home');
   };
-  const removeFromMyGroups = (id) => {
-    const next = myGroups.filter(g => g.id !== id);
-    setMyGroupsState(next); setMyGroups(next);
+  const logout = () => {
+    saveSession(null); setSessionState(null); setMyGroupsState([]); setActiveGroupId(null); setView('home');
   };
+
+  const addToMyGroups = async (g) => {
+    if (!session) return;
+    try { await supabase.from('kullanici_gruplari').upsert({ kullanici_id: session.id, grup_id: g.id }, { onConflict: 'kullanici_id,grup_id', ignoreDuplicates: true }); } catch {}
+    loadGroups(session.id);
+  };
+  const removeFromMyGroups = async (id) => {
+    if (!session) return;
+    await supabase.from('kullanici_gruplari').delete().eq('kullanici_id', session.id).eq('grup_id', id);
+    loadGroups(session.id);
+  };
+
+  if (!session) {
+    return (
+      <div style={{ minHeight: '100vh', width: '100%' }}>
+        <div style={{ maxWidth: 600, margin: '0 auto', padding: '20px 18px 60px' }}>
+          <AuthView onAuthed={onAuthed} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ minHeight: '100vh', width: '100%' }}>
       <div style={{ maxWidth: 600, margin: '0 auto', padding: '20px 18px 120px' }}>
-        {view === 'home' && <HomeView myGroups={myGroups}
+        {view === 'home' && <HomeView session={session} myGroups={myGroups} loadingGroups={loadingGroups}
           onOpenGroup={(id) => { setActiveGroupId(id); setView('group'); }}
-          onNewGroup={() => setView('newGroup')} onJoinGroup={() => setView('joinGroup')} />}
+          onNewGroup={() => setView('newGroup')} onJoinGroup={() => setView('joinGroup')} onLogout={logout} />}
         {view === 'newGroup' && <NewGroupView
           onCreated={(g) => { addToMyGroups(g); setActiveGroupId(g.id); setView('group'); }}
           onBack={() => setView('home')} />}
@@ -70,6 +127,107 @@ export default function App() {
   );
 }
 
+function AuthView({ onAuthed }) {
+  const [mode, setMode] = useState('login'); // 'login' | 'register'
+  const [kullaniciAdi, setKullaniciAdi] = useState('');
+  const [sifre, setSifre] = useState('');
+  const [showPw, setShowPw] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const adiNorm = kullaniciAdi.trim().toLowerCase();
+  const canSubmit = adiNorm.length >= 3 && sifre.length >= 4;
+
+  const submit = async () => {
+    if (!canSubmit || busy) return;
+    setBusy(true); setError('');
+    try {
+      const hash = await hashPassword(sifre);
+      if (mode === 'register') {
+        const { data: existing } = await supabase.from('kullanicilar').select('id').eq('kullanici_adi', adiNorm).maybeSingle();
+        if (existing) { setError('Bu kullanıcı adı zaten alınmış.'); setBusy(false); return; }
+        const { data, error: e } = await supabase.from('kullanicilar')
+          .insert({ kullanici_adi: adiNorm, sifre: hash }).select().single();
+        if (e) throw e;
+        onAuthed(data);
+      } else {
+        const { data, error: e } = await supabase.from('kullanicilar').select('*').eq('kullanici_adi', adiNorm).maybeSingle();
+        if (e) throw e;
+        if (!data) { setError('Bu kullanıcı adı bulunamadı.'); setBusy(false); return; }
+        if (data.sifre !== hash) { setError('Şifre hatalı.'); setBusy(false); return; }
+        onAuthed(data);
+      }
+    } catch (err) { setError('Bir hata oluştu: ' + (err.message || 'bilinmeyen')); setBusy(false); }
+  };
+
+  return (
+    <div className="rise">
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', marginTop: 36, marginBottom: 34 }}>
+        <div style={{ width: 60, height: 60, borderRadius: 18, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'linear-gradient(135deg, var(--terracotta), var(--terracotta-dark))', boxShadow: '0 6px 18px rgba(193,96,47,0.32)', marginBottom: 18 }}>
+          <Plane color="#fff" size={28} strokeWidth={2} />
+        </div>
+        <h1 className="serif" style={{ fontSize: 30, fontWeight: 600, letterSpacing: '-0.01em' }}>Seyahat Kasa</h1>
+        <p style={{ color: 'var(--ink-soft)', fontSize: 14, marginTop: 6, maxWidth: 300 }}>
+          {mode === 'login' ? 'Hesabına gir, grupların her cihazda seni beklesin.' : 'Bir hesap oluştur, grupların her yerde seninle gelsin.'}
+        </p>
+      </div>
+
+      <div className="card" style={{ padding: 22 }}>
+        <div style={{ display: 'flex', gap: 4, background: 'var(--paper-2)', borderRadius: 13, padding: 4, marginBottom: 22 }}>
+          {[{ k: 'login', l: 'Giriş Yap' }, { k: 'register', l: 'Kayıt Ol' }].map(t => (
+            <button key={t.k} onClick={() => { setMode(t.k); setError(''); }} className="tap"
+              style={{ flex: 1, borderRadius: 10, padding: '10px 0', fontSize: 13.5, fontWeight: 600, border: 'none',
+                ...(mode === t.k ? { background: 'var(--card)', color: 'var(--ink)', boxShadow: 'var(--shadow-sm)' } : { background: 'transparent', color: 'var(--ink-soft)' }) }}>
+              {t.l}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div>
+            <label className="label">Kullanıcı Adı</label>
+            <div style={{ position: 'relative' }}>
+              <AtSign size={17} color="var(--ink-faint)" style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+              <input value={kullaniciAdi} onChange={e => setKullaniciAdi(e.target.value)} placeholder="kullaniciadi" autoCapitalize="none" autoCorrect="off" spellCheck={false}
+                className="input" style={{ paddingLeft: 40 }}
+                onKeyDown={e => { if (e.key === 'Enter') submit(); }} />
+            </div>
+          </div>
+
+          <div>
+            <label className="label">Şifre</label>
+            <div style={{ position: 'relative' }}>
+              <Lock size={17} color="var(--ink-faint)" style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+              <input value={sifre} onChange={e => setSifre(e.target.value)} placeholder="••••••" type={showPw ? 'text' : 'password'}
+                className="input" style={{ paddingLeft: 40, paddingRight: 44 }}
+                onKeyDown={e => { if (e.key === 'Enter') submit(); }} />
+              <button onClick={() => setShowPw(!showPw)} className="tap" type="button"
+                style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--ink-faint)', padding: 6, display: 'flex' }}>
+                {showPw ? <EyeOff size={17} /> : <Eye size={17} />}
+              </button>
+            </div>
+            {mode === 'register' && <p style={{ color: 'var(--ink-faint)', fontSize: 11.5, marginTop: 6 }}>En az 4 karakter. Şifreni unutma — sıfırlama yok.</p>}
+          </div>
+
+          {error && <p style={{ color: 'var(--berry)', fontSize: 13.5 }}>{error}</p>}
+
+          <button onClick={submit} disabled={!canSubmit || busy} className="btn-primary tap"
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            {busy && <Loader2 size={18} className="spin" />}
+            {busy ? 'Lütfen bekle...' : (mode === 'login' ? 'Giriş Yap' : 'Hesap Oluştur')}
+            {!busy && <ArrowRight size={18} />}
+          </button>
+        </div>
+      </div>
+
+      <p style={{ color: 'var(--ink-faint)', fontSize: 12, textAlign: 'center', marginTop: 18, lineHeight: 1.5 }}>
+        Giriş yaptığın gruplar hesabına kaydedilir;<br />başka cihazdan aynı kullanıcı adıyla girince hepsi gelir.
+      </p>
+    </div>
+  );
+}
+
 function Avatar({ name, id, size = 38 }) {
   return (
     <div style={{ width: size, height: size, borderRadius: '50%', flexShrink: 0,
@@ -80,7 +238,7 @@ function Avatar({ name, id, size = 38 }) {
   );
 }
 
-function HomeView({ myGroups, onOpenGroup, onNewGroup, onJoinGroup }) {
+function HomeView({ session, myGroups, loadingGroups, onOpenGroup, onNewGroup, onJoinGroup, onLogout }) {
   return (
     <div className="rise">
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 40, marginTop: 12 }}>
@@ -88,10 +246,16 @@ function HomeView({ myGroups, onOpenGroup, onNewGroup, onJoinGroup }) {
           background: 'linear-gradient(135deg, var(--terracotta), var(--terracotta-dark))', boxShadow: '0 4px 12px rgba(193,96,47,0.3)' }}>
           <Plane color="#fff" size={22} strokeWidth={2} />
         </div>
-        <div>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <div className="serif" style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.01em' }}>Seyahat Kasa</div>
-          <div style={{ color: 'var(--ink-faint)', fontSize: 13 }}>Hesaplaşmadan keyfini çıkar</div>
+          <div style={{ color: 'var(--ink-faint)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 5 }}>
+            <AtSign size={12} /> {session?.kullanici_adi}
+          </div>
         </div>
+        <button onClick={onLogout} className="tap" title="Çıkış yap"
+          style={{ width: 40, height: 40, borderRadius: 11, background: 'var(--card)', border: '1px solid var(--line)', color: 'var(--ink-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <LogOut size={18} />
+        </button>
       </div>
 
       <div style={{ marginBottom: 28 }}>
@@ -124,7 +288,11 @@ function HomeView({ myGroups, onOpenGroup, onNewGroup, onJoinGroup }) {
         <span style={{ color: 'var(--ink-faint)', fontSize: 12 }}>{myGroups.length}</span>
       </div>
 
-      {myGroups.length === 0 ? (
+      {loadingGroups ? (
+        <div className="card-flat" style={{ padding: 36, textAlign: 'center', borderStyle: 'dashed', color: 'var(--ink-faint)' }}>
+          <Loader2 className="spin" size={22} style={{ margin: '0 auto' }} />
+        </div>
+      ) : myGroups.length === 0 ? (
         <div className="card-flat" style={{ padding: 36, textAlign: 'center', borderStyle: 'dashed' }}>
           <div style={{ color: 'var(--ink-soft)', fontSize: 14 }}>Henüz bir grup yok.</div>
           <div style={{ color: 'var(--ink-faint)', fontSize: 12.5, marginTop: 4 }}>Yukarıdan birini oluştur ya da katıl.</div>
