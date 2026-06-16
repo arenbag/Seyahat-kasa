@@ -6,74 +6,112 @@
 }
 
 :root {
-  --accent-1: #f4a261;
-  --accent-2: #e76f51;
-  --bg-top: #2a3f5f;
-  --bg-mid: #1a2332;
-  --bg-bottom: #0f1620;
-  --emerald: #34d399;
-  --rose: #fb7185;
-  --amber: #fbbf24;
-  --sky: #38bdf8;
+  --paper: #f4ede1;
+  --paper-2: #ece2d2;
+  --card: #fbf7f0;
+  --ink: #2b2620;
+  --ink-soft: #6b6258;
+  --ink-faint: #9c9286;
+  --line: #e0d5c4;
+  --terracotta: #c1602f;
+  --terracotta-dark: #a04d22;
+  --olive: #6f7a4f;
+  --gold: #b8893f;
+  --berry: #9e4b54;
+  --teal: #3f6b6b;
+  --shadow-sm: 0 1px 2px rgba(43,38,32,0.04), 0 2px 8px rgba(43,38,32,0.04);
+  --shadow-md: 0 2px 6px rgba(43,38,32,0.05), 0 8px 24px rgba(43,38,32,0.08);
+  --shadow-lg: 0 8px 16px rgba(43,38,32,0.08), 0 20px 48px rgba(43,38,32,0.14);
 }
 
 html, body {
   width: 100%;
   min-height: 100%;
-  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
-  background: var(--bg-bottom);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: 'Albert Sans', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
 body {
-  background: radial-gradient(ellipse at top, var(--bg-top) 0%, var(--bg-mid) 40%, var(--bg-bottom) 100%);
+  background:
+    radial-gradient(circle at 15% 0%, rgba(193,96,47,0.06), transparent 40%),
+    radial-gradient(circle at 85% 10%, rgba(111,122,79,0.05), transparent 35%),
+    var(--paper);
   background-attachment: fixed;
   min-height: 100vh;
-  color: white;
 }
 
-input, button, select, textarea {
-  font-family: inherit;
-}
+input, button, select, textarea { font-family: inherit; color: inherit; }
 
 input[type="number"]::-webkit-outer-spin-button,
-input[type="number"]::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
+input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+.serif { font-family: 'Fraunces', Georgia, serif; }
+.serif-italic { font-family: 'Fraunces', Georgia, serif; font-style: italic; }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: var(--shadow-sm);
 }
 
-.display-font {
-  font-family: 'Fraunces', serif;
-  font-style: italic;
+.card-flat {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 18px;
 }
 
-.glow-card {
-  background: linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255,255,255,0.08);
+.tap { transition: transform 0.18s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.18s ease, background 0.18s ease; cursor: pointer; }
+.tap:active { transform: scale(0.97); }
+
+.input {
+  width: 100%;
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: #fff;
+  border: 1.5px solid var(--line);
+  color: var(--ink);
+  font-size: 16px;
+  outline: none;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.input::placeholder { color: var(--ink-faint); }
+.input:focus { border-color: var(--terracotta); box-shadow: 0 0 0 3px rgba(193,96,47,0.1); }
+
+.btn-primary {
+  border: none;
+  border-radius: 14px;
+  padding: 16px;
+  font-weight: 600;
+  font-size: 16px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--terracotta), var(--terracotta-dark));
+  box-shadow: 0 4px 14px rgba(193,96,47,0.3);
+}
+.btn-primary:disabled { opacity: 0.4; box-shadow: none; }
+
+.label {
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 8px;
+  display: block;
 }
 
-.pill-btn {
-  transition: all 0.2s ease;
-  cursor: pointer;
-}
-.pill-btn:active {
-  transform: scale(0.96);
-}
+@keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+.rise { animation: rise 0.45s cubic-bezier(0.22,1,0.36,1) backwards; }
 
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-.anim-in {
-  animation: slideUp 0.35s ease-out backwards;
-}
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+.fade { animation: fade 0.3s ease backwards; }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-.spinner {
-  animation: spin 0.8s linear infinite;
-}
+@keyframes sheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.sheet-up { animation: sheetUp 0.4s cubic-bezier(0.22,1,0.36,1); }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin 0.8s linear infinite; }
 
 ::-webkit-scrollbar { width: 0; background: transparent; }
