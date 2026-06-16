@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Plus, Users, Receipt, ArrowRightLeft, Trash2, Check, X, Plane, Coins, ChevronLeft, Copy, Loader2, Share2,
   UtensilsCrossed, Car, BedDouble, Ticket, ShoppingBag, Plane as PlaneIcon, Wine, MoreHorizontal, TrendingUp,
-  LogOut, User, Lock, AtSign, ArrowRight, Eye, EyeOff } from 'lucide-react';
+  LogOut, User, Lock, AtSign, ArrowRight, Eye, EyeOff, Pencil } from 'lucide-react';
 import { supabase } from './supabase';
 
 const CURRENCY_SYMBOLS = { TRY: '₺', EUR: '€', USD: '$', GBP: '£', JPY: '¥', CHF: 'Fr', AED: 'د.إ' };
@@ -444,6 +444,7 @@ function GroupView({ groupId, onBack, onLeave, onDeleted }) {
   const [expenses, setExpenses] = useState([]);
   const [tab, setTab] = useState('expenses');
   const [showNewExpense, setShowNewExpense] = useState(false);
+  const [editExpense, setEditExpense] = useState(null);
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -496,13 +497,15 @@ function GroupView({ groupId, onBack, onLeave, onDeleted }) {
         ))}
       </div>
 
-      {tab === 'expenses' && <ExpensesTab group={group} members={members} expenses={expenses} reload={reload} />}
+      {tab === 'expenses' && <ExpensesTab group={group} members={members} expenses={expenses} reload={reload} onEdit={(e) => setEditExpense(e)} />}
       {tab === 'balances' && <BalancesTab group={group} members={members} expenses={expenses} />}
       {tab === 'settings' && <SettingsTab group={group} members={members} expenses={expenses} reload={reload} onLeave={onLeave} onDeleted={onDeleted} />}
 
-      {showNewExpense && <NewExpenseModal group={group} members={members} onClose={() => setShowNewExpense(false)} onSaved={() => { setShowNewExpense(false); reload(); }} />}
+      {(showNewExpense || editExpense) && <NewExpenseModal group={group} members={members} expense={editExpense}
+        onClose={() => { setShowNewExpense(false); setEditExpense(null); }}
+        onSaved={() => { setShowNewExpense(false); setEditExpense(null); reload(); }} />}
 
-      {tab === 'expenses' && !showNewExpense && (
+      {tab === 'expenses' && !showNewExpense && !editExpense && (
         <button onClick={() => setShowNewExpense(true)} className="tap"
           style={{ position: 'fixed', bottom: 26, right: 26, width: 58, height: 58, borderRadius: 999, border: 'none', boxShadow: '0 8px 28px rgba(193,96,47,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 20, background: 'linear-gradient(135deg, var(--terracotta), var(--terracotta-dark))' }}>
           <Plus color="#fff" size={28} strokeWidth={2.5} />
@@ -512,7 +515,7 @@ function GroupView({ groupId, onBack, onLeave, onDeleted }) {
   );
 }
 
-function ExpensesTab({ group, members, expenses, reload }) {
+function ExpensesTab({ group, members, expenses, reload, onEdit }) {
   const baseSym = CURRENCY_SYMBOLS[group.ana_para_birimi] || group.ana_para_birimi;
   const deleteExpense = async (id) => {
     if (!confirm('Bu harcamayı silmek istediğinden emin misin?')) return;
@@ -553,7 +556,10 @@ function ExpensesTab({ group, members, expenses, reload }) {
                   <div style={{ color: 'var(--ink-faint)', fontSize: 11.5 }}>≈ {baseSym}{formatNum(baseAmt)}</div>
                 )}
               </div>
-              <button onClick={() => deleteExpense(e.id)} className="tap" style={{ color: 'var(--ink-faint)', background: 'none', border: 'none', padding: 4, marginLeft: 2 }}>
+              <button onClick={() => onEdit(e)} className="tap" style={{ color: 'var(--ink-faint)', background: 'none', border: 'none', padding: 4, marginLeft: 2 }} title="Düzenle">
+                <Pencil size={15} />
+              </button>
+              <button onClick={() => deleteExpense(e.id)} className="tap" style={{ color: 'var(--ink-faint)', background: 'none', border: 'none', padding: 4 }} title="Sil">
                 <Trash2 size={15} />
               </button>
             </div>
@@ -565,14 +571,15 @@ function ExpensesTab({ group, members, expenses, reload }) {
   );
 }
 
-function NewExpenseModal({ group, members, onClose, onSaved }) {
-  const [baslik, setBaslik] = useState('');
-  const [tutar, setTutar] = useState('');
-  const [paraBirimi, setParaBirimi] = useState(group.ana_para_birimi);
-  const [kategori, setKategori] = useState('yemek');
-  const [odeyenId, setOdeyenId] = useState(members[0]?.id || '');
-  const [bolusenler, setBolusenler] = useState(members.map(m => m.id));
-  const [notMetni, setNotMetni] = useState('');
+function NewExpenseModal({ group, members, expense, onClose, onSaved }) {
+  const editing = !!expense;
+  const [baslik, setBaslik] = useState(expense?.baslik || '');
+  const [tutar, setTutar] = useState(expense != null ? String(expense.tutar) : '');
+  const [paraBirimi, setParaBirimi] = useState(expense?.para_birimi || group.ana_para_birimi);
+  const [kategori, setKategori] = useState(expense?.kategori || 'yemek');
+  const [odeyenId, setOdeyenId] = useState(expense?.odeyen_id || members[0]?.id || '');
+  const [bolusenler, setBolusenler] = useState(expense?.bolusenler || members.map(m => m.id));
+  const [notMetni, setNotMetni] = useState(expense?.not_metni || '');
   const [saving, setSaving] = useState(false);
 
   const toggle = (id) => setBolusenler(bolusenler.includes(id) ? bolusenler.filter(x => x !== id) : [...bolusenler, id]);
@@ -581,10 +588,12 @@ function NewExpenseModal({ group, members, onClose, onSaved }) {
   const save = async () => {
     if (!canSave || saving) return;
     setSaving(true);
-    await supabase.from('harcamalar').insert({
+    const payload = {
       grup_id: group.id, baslik: baslik.trim(), tutar: parseFloat(tutar), para_birimi: paraBirimi,
       kategori, odeyen_id: odeyenId, bolusenler, not_metni: notMetni.trim(),
-    });
+    };
+    if (editing) await supabase.from('harcamalar').update(payload).eq('id', expense.id);
+    else await supabase.from('harcamalar').insert(payload);
     onSaved();
   };
 
@@ -595,7 +604,7 @@ function NewExpenseModal({ group, members, onClose, onSaved }) {
           <div style={{ width: 40, height: 5, borderRadius: 999, background: 'var(--line)' }} />
         </div>
         <div style={{ position: 'sticky', top: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px 14px', background: 'var(--paper)', zIndex: 2 }}>
-          <h3 className="serif" style={{ fontWeight: 600, fontSize: 20 }}>Yeni Harcama</h3>
+          <h3 className="serif" style={{ fontWeight: 600, fontSize: 20 }}>{editing ? 'Harcamayı Düzenle' : 'Yeni Harcama'}</h3>
           <button onClick={onClose} className="tap" style={{ color: 'var(--ink-soft)', background: 'var(--card)', border: '1px solid var(--line)', borderRadius: 999, width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={19} /></button>
         </div>
 
@@ -688,7 +697,7 @@ function NewExpenseModal({ group, members, onClose, onSaved }) {
           <button onClick={save} disabled={!canSave || saving} className="btn-primary tap"
             style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
             {saving && <Loader2 size={18} className="spin" />}
-            {saving ? 'Kaydediliyor...' : 'Kaydet'}
+            {saving ? 'Kaydediliyor...' : (editing ? 'Güncelle' : 'Kaydet')}
           </button>
         </div>
       </div>
