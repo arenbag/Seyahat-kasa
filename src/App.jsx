@@ -727,8 +727,8 @@ function LeafletMap({ lat, lng, height = 180 }) {
     const map = L.map(ref.current, { zoomControl: false, attributionControl: false, dragging: false, scrollWheelZoom: false, doubleClickZoom: false, touchZoom: false, boxZoom: false, keyboard: false }).setView([lat, lng], 15);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
     L.marker([lat, lng]).addTo(map);
-    const t = setTimeout(() => map.invalidateSize(), 150);
-    return () => { clearTimeout(t); map.remove(); };
+    const ts = [120, 350, 650].map(d => setTimeout(() => { try { map.invalidateSize(); } catch {} }, d));
+    return () => { ts.forEach(clearTimeout); map.remove(); };
   }, [lat, lng]);
   return <div ref={ref} style={{ height, width: '100%', borderRadius: 12, overflow: 'hidden', border: '1px solid var(--line)' }} />;
 }
@@ -758,8 +758,8 @@ function LocationPicker({ initial, onClose, onConfirm }) {
     if (sel) markerRef.current = L.marker([sel.lat, sel.lng]).addTo(map);
     map.on('click', (e) => place(e.latlng.lat, e.latlng.lng));
     mapRef.current = map;
-    const t = setTimeout(() => map.invalidateSize(), 250);
-    return () => { clearTimeout(t); map.remove(); mapRef.current = null; markerRef.current = null; };
+    const ts = [120, 350, 650, 1000].map(d => setTimeout(() => { try { map.invalidateSize(); } catch {} }, d));
+    return () => { ts.forEach(clearTimeout); map.remove(); mapRef.current = null; markerRef.current = null; };
   }, []);
 
   const search = async () => {
@@ -822,7 +822,7 @@ function LocationPicker({ initial, onClose, onConfirm }) {
               <button onClick={useCurrent} className="tap" style={{ borderRadius: 12, padding: 11, border: '1.5px solid var(--line)', background: '#fff', color: 'var(--ink-soft)', fontWeight: 500, fontSize: 13.5, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                 <MapPin size={15} /> Konumumu kullan
               </button>
-              <div ref={ref} style={{ height: '46vh', minHeight: 260, width: '100%', borderRadius: 14, overflow: 'hidden', border: '1px solid var(--line)' }} />
+              <div ref={ref} style={{ height: '46vh', minHeight: 260, flexShrink: 0, width: '100%', borderRadius: 14, overflow: 'hidden', border: '1px solid var(--line)' }} />
               <p style={{ color: 'var(--ink-faint)', fontSize: 12, textAlign: 'center' }}>Haritada bir yere dokunarak işaretle.</p>
               {sel && <div style={{ fontSize: 13, color: 'var(--ink-soft)', textAlign: 'center' }}>📍 {sel.ad || `${sel.lat.toFixed(5)}, ${sel.lng.toFixed(5)}`}</div>}
               <button onClick={openGoogle} type="button" className="tap" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 12, border: '1.5px solid var(--line)', background: '#fff', color: 'var(--ink-soft)', padding: 11, fontWeight: 500, fontSize: 13.5 }}>
