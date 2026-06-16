@@ -19,6 +19,12 @@ const CATEGORIES = [
 ];
 const catOf = (id) => CATEGORIES.find(c => c.id === id) || CATEGORIES[CATEGORIES.length - 1];
 
+// Bir harcamanın ödeyenlerini normalize eder: çoklu ödeyen (odeyenler) varsa onu,
+// yoksa eski tek-ödeyen alanından ({odeyen_id, tutar}) üretir.
+const payersOf = (e) => (Array.isArray(e.odeyenler) && e.odeyenler.length)
+  ? e.odeyenler
+  : [{ id: e.odeyen_id, tutar: e.tutar }];
+
 const AVATAR_COLORS = ['#c1602f', '#3f6b6b', '#6f7a4f', '#b8893f', '#9e4b54', '#8a5a9e', '#4a6d9e', '#a0612f'];
 const avatarColor = (id) => {
   let h = 0;
@@ -442,6 +448,7 @@ function GroupView({ groupId, onBack, onLeave, onDeleted }) {
   const [group, setGroup] = useState(null);
   const [members, setMembers] = useState([]);
   const [expenses, setExpenses] = useState([]);
+  const [transfers, setTransfers] = useState([]);
   const [tab, setTab] = useState('expenses');
   const [showNewExpense, setShowNewExpense] = useState(false);
   const [editExpense, setEditExpense] = useState(null);
@@ -452,7 +459,8 @@ function GroupView({ groupId, onBack, onLeave, onDeleted }) {
     const { data: g } = await supabase.from('gruplar').select('*').eq('id', groupId).maybeSingle();
     const { data: u } = await supabase.from('uyeler').select('*').eq('grup_id', groupId).order('olusturma_tarihi');
     const { data: h } = await supabase.from('harcamalar').select('*').eq('grup_id', groupId).order('olusturma_tarihi', { ascending: false });
-    setGroup(g); setMembers(u || []); setExpenses(h || []); setLoading(false);
+    const { data: t } = await supabase.from('transferler').select('*').eq('grup_id', groupId).order('olusturma_tarihi', { ascending: false });
+    setGroup(g); setMembers(u || []); setExpenses(h || []); setTransfers(t || []); setLoading(false);
   }, [groupId]);
 
   useEffect(() => { reload(); }, [reload]);
@@ -499,8 +507,8 @@ function GroupView({ groupId, onBack, onLeave, onDeleted }) {
       </div>
 
       {tab === 'expenses' && <ExpensesTab group={group} members={members} expenses={expenses} reload={reload} onEdit={(e) => setEditExpense(e)} />}
-      {tab === 'balances' && <BalancesTab group={group} members={members} expenses={expenses} />}
-      {tab === 'settings' && <SettingsTab group={group} members={members} expenses={expenses} reload={reload} onLeave={onLeave} onDeleted={onDeleted} />}
+      {tab === 'balances' && <BalancesTab group={group} members={members} expenses={expenses} transfers={transfers} reload={reload} />}
+      {tab === 'settings' && <SettingsTab group={group} members={members} expenses={expenses} transfers={transfers} reload={reload} onLeave={onLeave} onDeleted={onDeleted} />}
     </div>
 
     {(showNewExpense || editExpense) && <NewExpenseModal group={group} members={members} expense={editExpense}
@@ -537,7 +545,9 @@ function ExpensesTab({ group, members, expenses, reload, onEdit }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
       {expenses.map((e, i) => {
-        const payer = members.find(m => m.id === e.odeyen_id);
+        const payers = payersOf(e);
+        const payerNames = payers.map(p => members.find(m => m.id === p.id)?.ad || '?');
+        const payerLabel = payerNames.length === 1 ? payerNames[0] : `${payerNames.length} kişi`;
         const baseAmt = convertToBase(e.tutar, e.para_birimi, group.ana_para_birimi, group.kurlar);
         const cat = catOf(e.kategori);
         return (
@@ -548,8 +558,8 @@ function ExpensesTab({ group, members, expenses, reload, onEdit }) {
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 600, fontSize: 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.baslik}</div>
-                <div style={{ color: 'var(--ink-faint)', fontSize: 12.5, marginTop: 1 }}>
-                  <span style={{ color: 'var(--ink-soft)', fontWeight: 500 }}>{payer?.ad || '?'}</span> ödedi · {e.bolusenler.length} kişi
+                <div style={{ color: 'var(--ink-faint)', fontSize: 12.5, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <span style={{ color: 'var(--ink-soft)', fontWeight: 500 }}>{payerLabel}</span> ödedi · {e.bolusenler.length} kişi
                 </div>
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
@@ -581,20 +591,39 @@ function NewExpenseModal({ group, members, expense, onClose, onSaved }) {
   const [tutar, setTutar] = useState(expense != null ? String(expense.tutar) : '');
   const [paraBirimi, setParaBirimi] = useState(expense?.para_birimi || group.ana_para_birimi);
   const [kategori, setKategori] = useState(expense?.kategori || 'yemek');
-  const [odeyenId, setOdeyenId] = useState(expense?.odeyen_id || members[0]?.id || '');
+  const [payers, setPayers] = useState(
+    expense
+      ? (Array.isArray(expense.odeyenler) && expense.odeyenler.length
+          ? expense.odeyenler.map(p => ({ id: p.id, tutar: String(p.tutar) }))
+          : [{ id: expense.odeyen_id, tutar: '' }])
+      : [{ id: members[0]?.id || '', tutar: '' }]
+  );
   const [bolusenler, setBolusenler] = useState(expense?.bolusenler || members.map(m => m.id));
   const [notMetni, setNotMetni] = useState(expense?.not_metni || '');
   const [saving, setSaving] = useState(false);
 
+  const isMulti = payers.length > 1;
+  const payersSum = payers.reduce((s, p) => s + (parseFloat(p.tutar) || 0), 0);
+  const total = isMulti ? payersSum : (parseFloat(tutar) || 0);
+  const sym = CURRENCY_SYMBOLS[paraBirimi];
+
   const toggle = (id) => setBolusenler(bolusenler.includes(id) ? bolusenler.filter(x => x !== id) : [...bolusenler, id]);
-  const canSave = baslik.trim() && parseFloat(tutar) > 0 && odeyenId && bolusenler.length > 0;
+  const isPayer = (id) => payers.some(p => p.id === id);
+  const togglePayer = (id) => setPayers(prev => prev.find(p => p.id === id)
+    ? (prev.length > 1 ? prev.filter(p => p.id !== id) : prev)
+    : [...prev, { id, tutar: '' }]);
+  const setPayerAmount = (id, v) => setPayers(prev => prev.map(p => p.id === id ? { ...p, tutar: v } : p));
+
+  const payersValid = isMulti ? payers.every(p => parseFloat(p.tutar) > 0) : (parseFloat(tutar) > 0);
+  const canSave = baslik.trim() && total > 0 && payersValid && payers.every(p => p.id) && bolusenler.length > 0;
 
   const save = async () => {
     if (!canSave || saving) return;
     setSaving(true);
+    const odeyenler = payers.map(p => ({ id: p.id, tutar: isMulti ? parseFloat(p.tutar) : total }));
     const payload = {
-      grup_id: group.id, baslik: baslik.trim(), tutar: parseFloat(tutar), para_birimi: paraBirimi,
-      kategori, odeyen_id: odeyenId, bolusenler, not_metni: notMetni.trim(),
+      grup_id: group.id, baslik: baslik.trim(), tutar: total, para_birimi: paraBirimi,
+      kategori, odeyen_id: payers[0].id, odeyenler, bolusenler, not_metni: notMetni.trim(),
     };
     if (editing) await supabase.from('harcamalar').update(payload).eq('id', expense.id);
     else await supabase.from('harcamalar').insert(payload);
@@ -619,13 +648,20 @@ function NewExpenseModal({ group, members, expense, onClose, onSaved }) {
           </div>
 
           <div>
-            <label className="label">Tutar</label>
+            <label className="label">{isMulti ? 'Toplam (otomatik)' : 'Tutar'}</label>
             <div style={{ display: 'flex', gap: 8 }}>
-              <input type="number" inputMode="decimal" value={tutar} onChange={e => setTutar(e.target.value)} placeholder="0.00" className="input serif" style={{ flex: 1, fontSize: 22, fontWeight: 600 }} />
+              {isMulti ? (
+                <div className="input serif" style={{ flex: 1, fontSize: 22, fontWeight: 600, display: 'flex', alignItems: 'center', background: 'var(--paper-2)', color: 'var(--ink)' }}>
+                  {sym}{formatNum(total)}
+                </div>
+              ) : (
+                <input type="number" inputMode="decimal" value={tutar} onChange={e => setTutar(e.target.value)} placeholder="0.00" className="input serif" style={{ flex: 1, fontSize: 22, fontWeight: 600 }} />
+              )}
               <select value={paraBirimi} onChange={e => setParaBirimi(e.target.value)} className="input" style={{ width: 'auto', fontWeight: 600 }}>
                 {Object.keys(CURRENCY_SYMBOLS).map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
+            {isMulti && <p style={{ color: 'var(--ink-faint)', fontSize: 11.5, marginTop: 6 }}>Toplam, ödeyenlerin tutarlarının toplamıdır.</p>}
           </div>
 
           <div>
@@ -649,18 +685,42 @@ function NewExpenseModal({ group, members, expense, onClose, onSaved }) {
             <label className="label">Kim Ödedi?</label>
             <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
               {members.map(m => {
-                const on = odeyenId === m.id;
+                const on = isPayer(m.id);
                 return (
-                  <button key={m.id} onClick={() => setOdeyenId(m.id)} className="tap"
+                  <button key={m.id} onClick={() => togglePayer(m.id)} className="tap"
                     style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '4px 2px', border: 'none', background: 'none', flexShrink: 0, minWidth: 60 }}>
                     <div style={{ position: 'relative', padding: 2, borderRadius: '50%', border: on ? '2.5px solid var(--terracotta)' : '2.5px solid transparent' }}>
                       <Avatar name={m.ad} id={m.id} size={42} />
+                      {on && (
+                        <span style={{ position: 'absolute', bottom: -2, right: -2, width: 18, height: 18, borderRadius: '50%', background: 'var(--terracotta)', border: '2px solid var(--paper)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <Check size={10} color="#fff" strokeWidth={3.5} />
+                        </span>
+                      )}
                     </div>
                     <span style={{ fontSize: 11.5, fontWeight: on ? 700 : 500, color: on ? 'var(--ink)' : 'var(--ink-faint)', maxWidth: 58, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.ad}</span>
                   </button>
                 );
               })}
             </div>
+            <p style={{ color: 'var(--ink-faint)', fontSize: 11.5, marginTop: 6 }}>Birden fazla kişi seçebilirsin; her biri için ödediği tutarı gir.</p>
+
+            {isMulti && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
+                {payers.map(p => {
+                  const m = members.find(x => x.id === p.id);
+                  return (
+                    <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <Avatar name={m?.ad} id={p.id} size={32} />
+                      <span style={{ flex: 1, fontSize: 14, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m?.ad}</span>
+                      <div style={{ position: 'relative', width: 130 }}>
+                        <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--ink-faint)', fontSize: 14, pointerEvents: 'none' }}>{sym}</span>
+                        <input type="number" inputMode="decimal" value={p.tutar} onChange={e => setPayerAmount(p.id, e.target.value)} placeholder="0.00" className="input" style={{ paddingLeft: 28, textAlign: 'right', fontWeight: 600 }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <div>
@@ -686,9 +746,9 @@ function NewExpenseModal({ group, members, expense, onClose, onSaved }) {
                 );
               })}
             </div>
-            {bolusenler.length > 0 && tutar > 0 && (
+            {bolusenler.length > 0 && total > 0 && (
               <p style={{ color: 'var(--ink-soft)', fontSize: 12.5, marginTop: 10, textAlign: 'center' }}>
-                Kişi başı <strong className="serif">{CURRENCY_SYMBOLS[paraBirimi]}{formatNum(parseFloat(tutar) / bolusenler.length)}</strong>
+                Kişi başı <strong className="serif">{sym}{formatNum(total / bolusenler.length)}</strong>
               </p>
             )}
           </div>
@@ -709,8 +769,10 @@ function NewExpenseModal({ group, members, expense, onClose, onSaved }) {
   );
 }
 
-function BalancesTab({ group, members, expenses }) {
+function BalancesTab({ group, members, expenses, transfers, reload }) {
   const baseSym = CURRENCY_SYMBOLS[group.ana_para_birimi] || group.ana_para_birimi;
+  const [showTransfer, setShowTransfer] = useState(false);
+  const [prefill, setPrefill] = useState(null);
 
   const { balances, settlements, total, byCat } = useMemo(() => {
     const bal = {}; members.forEach(m => bal[m.id] = 0);
@@ -720,8 +782,17 @@ function BalancesTab({ group, members, expenses }) {
       tot += baseAmt;
       cats[e.kategori || 'diger'] = (cats[e.kategori || 'diger'] || 0) + baseAmt;
       const per = baseAmt / e.bolusenler.length;
-      if (bal[e.odeyen_id] !== undefined) bal[e.odeyen_id] += baseAmt;
+      payersOf(e).forEach(p => {
+        const paidBase = convertToBase(p.tutar, e.para_birimi, group.ana_para_birimi, group.kurlar);
+        if (bal[p.id] !== undefined) bal[p.id] += paidBase;
+      });
       e.bolusenler.forEach(id => { if (bal[id] !== undefined) bal[id] -= per; });
+    });
+    // Nakit/elden ödemeler: gönderen borcunu kapatır (bakiye +), alan alacağı azalır (bakiye −)
+    (transfers || []).forEach(t => {
+      const amt = convertToBase(t.tutar, t.para_birimi, group.ana_para_birimi, group.kurlar);
+      if (bal[t.gonderen_id] !== undefined) bal[t.gonderen_id] += amt;
+      if (bal[t.alan_id] !== undefined) bal[t.alan_id] -= amt;
     });
     const creditors = [], debtors = [];
     Object.entries(bal).forEach(([id, v]) => { if (v > 0.01) creditors.push({ id, amt: v }); else if (v < -0.01) debtors.push({ id, amt: -v }); });
@@ -735,10 +806,16 @@ function BalancesTab({ group, members, expenses }) {
     }
     const byCat = Object.entries(cats).map(([id, v]) => ({ ...catOf(id), amt: v })).sort((a, b) => b.amt - a.amt);
     return { balances: bal, settlements: settle, total: tot, byCat };
-  }, [group, members, expenses]);
+  }, [group, members, expenses, transfers]);
 
   const member = (id) => members.find(m => m.id === id);
   const name = (id) => member(id)?.ad || '?';
+
+  const deleteTransfer = async (id) => {
+    if (!confirm('Bu nakit ödemeyi sil?')) return;
+    await supabase.from('transferler').delete().eq('id', id); reload();
+  };
+  const openSettle = (s) => { setPrefill({ from: s.from, to: s.to, amt: s.amt, para_birimi: group.ana_para_birimi }); setShowTransfer(true); };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
@@ -800,29 +877,147 @@ function BalancesTab({ group, members, expenses }) {
             <div style={{ color: 'var(--ink-soft)', fontSize: 14 }}>Herkes ödeşmiş 🎉</div>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {settlements.map((s, i) => (
-              <div key={i} className="card rise" style={{ padding: 13, display: 'flex', alignItems: 'center', gap: 10, animationDelay: `${i * 50}ms` }}>
-                <Avatar name={name(s.from)} id={s.from} size={34} />
-                <span style={{ fontWeight: 600, fontSize: 14 }}>{name(s.from)}</span>
-                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, color: 'var(--ink-faint)' }}>
-                  <div style={{ flex: 1, height: 1, background: 'var(--line)' }} />
-                  <ArrowRightLeft size={14} />
-                  <div style={{ flex: 1, height: 1, background: 'var(--line)' }} />
+          <>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {settlements.map((s, i) => (
+                <button key={i} onClick={() => openSettle(s)} className="card rise tap" title="Ödendiyse dokun, nakit ödeme olarak kaydet"
+                  style={{ padding: 13, display: 'flex', alignItems: 'center', gap: 10, animationDelay: `${i * 50}ms`, textAlign: 'left', width: '100%', cursor: 'pointer' }}>
+                  <Avatar name={name(s.from)} id={s.from} size={34} />
+                  <span style={{ fontWeight: 600, fontSize: 14 }}>{name(s.from)}</span>
+                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, color: 'var(--ink-faint)' }}>
+                    <div style={{ flex: 1, height: 1, background: 'var(--line)' }} />
+                    <ArrowRight size={14} />
+                    <div style={{ flex: 1, height: 1, background: 'var(--line)' }} />
+                  </div>
+                  <span style={{ fontWeight: 600, fontSize: 14 }}>{name(s.to)}</span>
+                  <Avatar name={name(s.to)} id={s.to} size={34} />
+                  <span className="serif" style={{ fontWeight: 600, fontSize: 15, color: 'var(--terracotta)', marginLeft: 4 }}>{baseSym}{formatNum(s.amt)}</span>
+                </button>
+              ))}
+            </div>
+            <p style={{ color: 'var(--ink-faint)', fontSize: 12, marginTop: 8, textAlign: 'center' }}>Bir ödeme gerçekleştiyse karta dokun, nakit ödeme olarak kaydet.</p>
+          </>
+        )}
+      </div>
+
+      <div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3 className="label" style={{ marginBottom: 0 }}>Nakit Ödemeler</h3>
+          <button onClick={() => { setPrefill(null); setShowTransfer(true); }} className="tap"
+            style={{ color: 'var(--terracotta)', fontSize: 12.5, fontWeight: 600, background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
+            <Plus size={14} /> Ödeme ekle
+          </button>
+        </div>
+        {(!transfers || transfers.length === 0) ? (
+          <p style={{ color: 'var(--ink-faint)', fontSize: 12.5, marginTop: 8 }}>Elden verilen nakitleri buraya ekle; bakiyeler buna göre güncellenir.</p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+            {transfers.map(t => (
+              <div key={t.id} className="card" style={{ padding: 11, display: 'flex', alignItems: 'center', gap: 9 }}>
+                <Avatar name={name(t.gonderen_id)} id={t.gonderen_id} size={30} />
+                <ArrowRight size={14} color="var(--ink-faint)" />
+                <Avatar name={name(t.alan_id)} id={t.alan_id} size={30} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name(t.gonderen_id)} → {name(t.alan_id)}</div>
+                  {t.not_metni && <div style={{ color: 'var(--ink-faint)', fontSize: 11.5, fontStyle: 'italic' }}>"{t.not_metni}"</div>}
                 </div>
-                <span style={{ fontWeight: 600, fontSize: 14 }}>{name(s.to)}</span>
-                <Avatar name={name(s.to)} id={s.to} size={34} />
-                <span className="serif" style={{ fontWeight: 600, fontSize: 15, color: 'var(--terracotta)', marginLeft: 4 }}>{baseSym}{formatNum(s.amt)}</span>
+                <span className="serif" style={{ fontWeight: 600, fontSize: 14, color: 'var(--olive)' }}>{CURRENCY_SYMBOLS[t.para_birimi]}{formatNum(t.tutar)}</span>
+                <button onClick={() => deleteTransfer(t.id)} className="tap" style={{ color: 'var(--ink-faint)', background: 'none', border: 'none', padding: 4 }}><Trash2 size={14} /></button>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {showTransfer && <TransferModal group={group} members={members} prefill={prefill}
+        onClose={() => { setShowTransfer(false); setPrefill(null); }}
+        onSaved={() => { setShowTransfer(false); setPrefill(null); reload(); }} />}
     </div>
   );
 }
 
-function SettingsTab({ group, members, expenses, reload, onLeave, onDeleted }) {
+function TransferModal({ group, members, prefill, onClose, onSaved }) {
+  const [gonderenId, setGonderenId] = useState(prefill?.from || members[0]?.id || '');
+  const [alanId, setAlanId] = useState(prefill?.to || members[1]?.id || '');
+  const [tutar, setTutar] = useState(prefill?.amt != null ? String(Math.round(prefill.amt * 100) / 100) : '');
+  const [paraBirimi, setParaBirimi] = useState(prefill?.para_birimi || group.ana_para_birimi);
+  const [notMetni, setNotMetni] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const canSave = gonderenId && alanId && gonderenId !== alanId && parseFloat(tutar) > 0;
+  const save = async () => {
+    if (!canSave || saving) return;
+    setSaving(true);
+    await supabase.from('transferler').insert({
+      grup_id: group.id, gonderen_id: gonderenId, alan_id: alanId,
+      tutar: parseFloat(tutar), para_birimi: paraBirimi, not_metni: notMetni.trim(),
+    });
+    onSaved();
+  };
+
+  const picker = (selectedId, setter, exclude) => (
+    <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
+      {members.map(m => {
+        const on = selectedId === m.id; const dis = exclude === m.id;
+        return (
+          <button key={m.id} onClick={() => !dis && setter(m.id)} className="tap" disabled={dis}
+            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '4px 2px', border: 'none', background: 'none', flexShrink: 0, minWidth: 60, opacity: dis ? 0.3 : 1 }}>
+            <div style={{ padding: 2, borderRadius: '50%', border: on ? '2.5px solid var(--terracotta)' : '2.5px solid transparent' }}>
+              <Avatar name={m.ad} id={m.id} size={42} />
+            </div>
+            <span style={{ fontSize: 11.5, fontWeight: on ? 700 : 500, color: on ? 'var(--ink)' : 'var(--ink-faint)', maxWidth: 58, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.ad}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  return (
+    <div className="fade" style={{ position: 'fixed', inset: 0, zIndex: 30, background: 'rgba(43,38,32,0.4)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }} onClick={onClose}>
+      <div className="sheet-up" onClick={ev => ev.stopPropagation()} style={{ width: '100%', maxWidth: 600, borderTopLeftRadius: 26, borderTopRightRadius: 26, maxHeight: '92vh', overflowY: 'auto', background: 'var(--paper)', borderTop: '1px solid var(--line)' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 10 }}>
+          <div style={{ width: 40, height: 5, borderRadius: 999, background: 'var(--line)' }} />
+        </div>
+        <div style={{ position: 'sticky', top: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px 14px', background: 'var(--paper)', zIndex: 2 }}>
+          <h3 className="serif" style={{ fontWeight: 600, fontSize: 20 }}>Nakit Ödeme</h3>
+          <button onClick={onClose} className="tap" style={{ color: 'var(--ink-soft)', background: 'var(--card)', border: '1px solid var(--line)', borderRadius: 999, width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={19} /></button>
+        </div>
+
+        <div style={{ padding: '0 20px 28px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+          <p style={{ color: 'var(--ink-soft)', fontSize: 13 }}>Elden verilen parayı kaydet. Borçlu kişi alacaklıya ödeyince bakiyeler güncellenir.</p>
+          <div>
+            <label className="label">Kim Verdi?</label>
+            {picker(gonderenId, setGonderenId, alanId)}
+          </div>
+          <div>
+            <label className="label">Kime Verdi?</label>
+            {picker(alanId, setAlanId, gonderenId)}
+          </div>
+          <div>
+            <label className="label">Tutar</label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input type="number" inputMode="decimal" value={tutar} onChange={e => setTutar(e.target.value)} placeholder="0.00" className="input serif" style={{ flex: 1, fontSize: 22, fontWeight: 600 }} />
+              <select value={paraBirimi} onChange={e => setParaBirimi(e.target.value)} className="input" style={{ width: 'auto', fontWeight: 600 }}>
+                {Object.keys(CURRENCY_SYMBOLS).map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="label">Not (opsiyonel)</label>
+            <input value={notMetni} onChange={e => setNotMetni(e.target.value)} placeholder="Örn. akşam elden verdi" className="input" />
+          </div>
+          <button onClick={save} disabled={!canSave || saving} className="btn-primary tap"
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            {saving && <Loader2 size={18} className="spin" />}
+            {saving ? 'Kaydediliyor...' : 'Ödemeyi Kaydet'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SettingsTab({ group, members, expenses, transfers, reload, onLeave, onDeleted }) {
   const [rates, setRates] = useState(group.kurlar);
   const [newMember, setNewMember] = useState('');
   const [savingRates, setSavingRates] = useState(false);
@@ -836,6 +1031,7 @@ function SettingsTab({ group, members, expenses, reload, onLeave, onDeleted }) {
     try {
       // Güvenlik için önce alt kayıtlar (harcama boş olmalı), sonra grup
       await supabase.from('harcamalar').delete().eq('grup_id', group.id);
+      await supabase.from('transferler').delete().eq('grup_id', group.id);
       await supabase.from('uyeler').delete().eq('grup_id', group.id);
       await supabase.from('kullanici_gruplari').delete().eq('grup_id', group.id);
       const { error } = await supabase.from('gruplar').delete().eq('id', group.id);
@@ -847,8 +1043,9 @@ function SettingsTab({ group, members, expenses, reload, onLeave, onDeleted }) {
   const saveRates = async () => { setSavingRates(true); await supabase.from('gruplar').update({ kurlar: rates }).eq('id', group.id); setSavingRates(false); reload(); };
   const addMember = async () => { if (!newMember.trim()) return; await supabase.from('uyeler').insert({ grup_id: group.id, ad: newMember.trim() }); setNewMember(''); reload(); };
   const removeMember = async (id) => {
-    const used = expenses.some(e => e.odeyen_id === id || e.bolusenler.includes(id));
-    if (used) { alert('Bu kişinin harcaması var, önce o harcamaları sil.'); return; }
+    const inExpense = expenses.some(e => e.odeyen_id === id || (e.odeyenler || []).some(p => p.id === id) || e.bolusenler.includes(id));
+    const inTransfer = (transfers || []).some(t => t.gonderen_id === id || t.alan_id === id);
+    if (inExpense || inTransfer) { alert('Bu kişinin harcaması veya nakit ödemesi var, önce onları sil.'); return; }
     if (!confirm('Bu kişiyi gruptan çıkar?')) return;
     await supabase.from('uyeler').delete().eq('id', id); reload();
   };
